@@ -1,0 +1,42 @@
+# Node modules (both client and server)
+node_modules/
+
+# Build outputs
+dist/
+build/
+prisma/generated/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Env files
+.env
+.env.production
+**/.env.production
+
+# Editor configs
+.vscode/
+.idea/
+
+# Coverage reports
+coverage/
+
+# Cache
+.cache/
+.next/
+.eslintcache
+
+# Local database or runtime files
+*.sqlite
+*.pid
+
+# Prettier or lint-staged temp files
+*.tsbuildinfo

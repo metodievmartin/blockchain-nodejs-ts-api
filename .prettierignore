@@ -1,0 +1,15 @@
+# Ignore build output
+dist/
+build/
+
+# Ignore dependencies
+node_modules/
+
+# Ignore minified files
+*.min.js
+
+# Ignore compiled assets
+public/assets/
+
+# Ignore specific config files
+package-lock.json

@@ -14,7 +14,7 @@ export const register = catchAsync(
     res: Response
   ): Promise<void> => {
     // Middleware already validates request body
-    const newUser = await authService.register(req.body);
+    const newUser = await authService.registerUser(req.body);
 
     res.status(201).json(newUser);
   }
@@ -30,7 +30,7 @@ export const login = catchAsync(
     res: Response
   ): Promise<void> => {
     // Middleware already validates request body
-    const loginResult = await authService.login(req.body);
+    const loginResult = await authService.loginUser(req.body);
 
     res.status(200).json(loginResult);
   }

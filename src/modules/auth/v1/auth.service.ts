@@ -1,6 +1,6 @@
 import { type User } from '../../../../prisma/generated/client';
 
-import * as authRepository from './auth.repository';
+import * as userRepository from '../../users/v1/user.repository';
 import { ApiError } from '../../../utils/api.error';
 import { hashPassword, comparePasswords } from '../../shared/auth';
 import {
@@ -13,19 +13,18 @@ import {
 /**
  * Register a new user
  */
-export async function register(
+export async function registerUser(
   userData: RegisterRequestBody
 ): Promise<RegisterResponse> {
   const { email, username, password } = userData;
 
   // Check if user already exists
-  const existingUser = await authRepository.findUserByEmailOrUsername(
+  const existingUser = await userRepository.findUserByEmailOrUsername(
     email,
     username
   );
-
   if (existingUser) {
-    const property = email === existingUser.email ? 'email' : 'username';
+    const property = existingUser.email === email ? 'email' : 'username';
     throw ApiError.conflict(`User with this ${property} already exists`);
   }
 
@@ -33,7 +32,7 @@ export async function register(
   const passwordHash = await hashPassword(password);
 
   // Create the user
-  const newUser = await authRepository.createUser({
+  const newUser = await userRepository.createUser({
     email,
     username,
     passwordHash,
@@ -51,7 +50,7 @@ export async function register(
 /**
  * Login user
  */
-export async function login(
+export async function loginUser(
   loginData: LoginRequestBody
 ): Promise<LoginResponse> {
   const { email, password } = loginData;
@@ -60,7 +59,7 @@ export async function login(
   const invalidCredentialsMsg = 'Incorrect email or password';
 
   // Find user by email
-  const user = await authRepository.findUserByEmail(email);
+  const user = await userRepository.findUserByEmail(email);
   if (!user) {
     throw ApiError.unauthorized(invalidCredentialsMsg);
   }
@@ -83,5 +82,5 @@ export async function login(
  * Get user by ID
  */
 export async function getUserById(id: string): Promise<User | null> {
-  return authRepository.findUserById(id);
+  return userRepository.findUserById(id);
 }

@@ -51,7 +51,7 @@ export async function findUserById(id: string): Promise<User | null> {
 }
 
 /**
- * Check if a user exists by email or username
+ * Find user by email or username
  */
 export async function findUserByEmailOrUsername(
   email: string,

@@ -50,3 +50,28 @@ export const LoginResponseSchema = z.object({
 });
 
 export type LoginResponse = z.infer<typeof LoginResponseSchema>;
+
+/**
+ * Refresh Token DTOs
+ */
+export const RefreshTokenRequestSchema = z.object({
+  refreshToken: z.string('Refresh token should be a string'),
+});
+
+export type RefreshTokenRequestBody = z.infer<typeof RefreshTokenRequestSchema>;
+
+export const RefreshTokenResponseSchema = z.object({
+  accessToken: z.string(),
+  expiresIn: z.number(),
+});
+
+export type RefreshTokenResponse = z.infer<typeof RefreshTokenResponseSchema>;
+
+/**
+ * Logout DTOs
+ */
+export const LogoutRequestSchema = z.object({
+  refreshToken: z.string('Refresh token should be a string'),
+});
+
+export type LogoutRequestBody = z.infer<typeof LogoutRequestSchema>;

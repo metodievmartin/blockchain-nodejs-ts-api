@@ -1,11 +1,18 @@
 import { Router } from 'express';
+
 import appConfig from './config/app.config';
+import authV1Router from './modules/auth/v1/auth.router';
 
 const appRouter = Router();
 
-// Mount routes
+// API v1 routes
+const v1 = Router();
+v1.use('/auth', authV1Router);
 
-// API routes
+// Mount versioned routes
+appRouter.use('/api/v1', v1);
+
+// Health check endpoint
 appRouter.get('/health', (req, res) => {
   res.status(200).json({
     status: 'ok',

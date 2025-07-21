@@ -2,12 +2,15 @@ import { Router } from 'express';
 
 import appConfig from './config/app.config';
 import authV1Router from './modules/auth/v1/auth.router';
+import userV1Router from './modules/users/v1/user.router';
 
 const appRouter = Router();
 
 // API v1 routes
 const v1 = Router();
+
 v1.use('/auth', authV1Router);
+v1.use('/users', userV1Router);
 
 // Mount versioned routes
 appRouter.use('/api/v1', v1);

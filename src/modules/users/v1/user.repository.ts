@@ -1,4 +1,5 @@
 import { type User } from '../../../../prisma/generated/client';
+import { type PublicUser } from './user.dto';
 
 import { getOrCreateDB } from '../../../config/db';
 
@@ -62,4 +63,23 @@ export async function findUserByEmailOrUsername(
       OR: [{ email }, { username }],
     },
   });
+}
+
+/**
+ * Get public user data by ID
+ * Returns only non-sensitive user properties
+ */
+export async function getPublicUserById(id: string): Promise<PublicUser | null> {
+  const user = await db.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      email: true,
+      username: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+
+  return user;
 }

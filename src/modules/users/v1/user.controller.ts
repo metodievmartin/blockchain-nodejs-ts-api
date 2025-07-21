@@ -11,20 +11,19 @@ import { type UpdateUserProfileRequest } from './user.dto';
  */
 export const getAuthenticatedUser = catchAsync(
   async (req: Request, res: Response) => {
-    // The user ID is added to the request by the requireAuthentication middleware
-    if (!req.user?.id) {
+    // The user object is added to the request by the requireAuthentication middleware
+    if (!req.user) {
       // This should never happen if the middleware is working correctly
       throw ApiError.unauthorized('Authentication required');
     }
 
-    const user = await userService.fetchPublicUser(req.user.id);
-
+    // Since req.user now contains the full PublicUser object, we can return it directly
     return res.status(200).json({
-      id: user.id,
-      email: user.email,
-      username: user.username,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
+      id: req.user.id,
+      email: req.user.email,
+      username: req.user.username,
+      createdAt: req.user.createdAt,
+      updatedAt: req.user.updatedAt,
     });
   }
 );
@@ -35,8 +34,8 @@ export const getAuthenticatedUser = catchAsync(
  */
 export const updateAuthenticatedUserProfile = catchAsync(
   async (req: Request<{}, any, UpdateUserProfileRequest>, res: Response) => {
-    // The user ID is added to the request by the requireAuthentication middleware
-    if (!req.user?.id) {
+    // The user object is added to the request by the requireAuthentication middleware
+    if (!req.user) {
       throw ApiError.unauthorized('Authentication required');
     }
 

@@ -3,6 +3,7 @@ import { type Request, type Response } from 'express';
 import * as userService from './user.service';
 import { ApiError } from '../../../utils/api.error';
 import { catchAsync } from '../../../utils/catch-async';
+import { type UpdateUserProfileRequest } from './user.dto';
 
 /**
  * GET /users/me
@@ -24,6 +25,31 @@ export const getAuthenticatedUser = catchAsync(
       username: user.username,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
+    });
+  }
+);
+
+/**
+ * PUT /users/me
+ * Updates the authenticated user's profile
+ */
+export const updateAuthenticatedUserProfile = catchAsync(
+  async (req: Request<{}, any, UpdateUserProfileRequest>, res: Response) => {
+    // The user ID is added to the request by the requireAuthentication middleware
+    if (!req.user?.id) {
+      throw ApiError.unauthorized('Authentication required');
+    }
+
+    // Update user profile
+    const { id, email, username, createdAt, updatedAt } =
+      await userService.updateUserProfile(req.user.id, req.body);
+
+    return res.status(200).json({
+      id,
+      email,
+      username,
+      createdAt,
+      updatedAt,
     });
   }
 );

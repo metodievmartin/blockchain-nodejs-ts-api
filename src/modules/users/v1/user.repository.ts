@@ -1,5 +1,5 @@
 import { type User } from '../../../../prisma/generated/client';
-import { type PublicUser } from './user.dto';
+import { type PublicUser, type UpdateUserProfileRequest } from './user.dto';
 
 import { getOrCreateDB } from '../../../config/db';
 
@@ -82,4 +82,27 @@ export async function getPublicUserById(id: string): Promise<PublicUser | null> 
   });
 
   return user;
+}
+
+/**
+ * Update user profile
+ * @param userId - The ID of the user to update
+ * @param data - The data to update (email and/or username)
+ * @returns The updated public user data
+ */
+export async function updateUser(
+  userId: string,
+  data: UpdateUserProfileRequest
+): Promise<PublicUser> {
+  return db.user.update({
+    where: { id: userId },
+    data,
+    select: {
+      id: true,
+      email: true,
+      username: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
 }

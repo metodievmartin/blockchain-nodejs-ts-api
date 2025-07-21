@@ -2,9 +2,10 @@ import type { Request, Response, NextFunction } from 'express';
 
 import { ApiError } from '../utils/api.error';
 import { catchAsync } from '../utils/catch-async';
-import { verifyToken } from '../modules/shared/jwt';
+import { verifyAccessToken } from '../modules/auth/v1/auth.service';
 
-// Extend Express Request type to include user property
+// Extend the Express Request type to include user property
+/* eslint-disable @typescript-eslint/no-namespace */
 declare global {
   namespace Express {
     interface Request {
@@ -39,8 +40,8 @@ export const requireAuthentication = catchAsync(
       throw ApiError.unauthorized('Authentication required');
     }
 
-    // Verify the token
-    const decoded = verifyToken(token, 'access');
+    // Verify the token using auth service
+    const decoded = verifyAccessToken(token);
 
     // Add user ID to request object
     req.user = {

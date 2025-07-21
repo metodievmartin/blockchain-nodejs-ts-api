@@ -65,6 +65,25 @@ async function _validateRefreshToken(
 }
 
 /**
+ * Verifies an access token and returns the decoded token
+ *
+ * @param accessToken - The access token to verify
+ * @returns The decoded token if valid
+ * @throws JwtTokenError if token is invalid or expired
+ */
+export function verifyAccessToken(accessToken: string): DecodedToken {
+  /*
+   Apart from purely verifying the token as valid JWT,
+   should also consider a way of invalidating the access token when the refresh token is revoked.
+   Problem: even if the refresh token is revoked, the access token can still be used for a short time until it expires.
+   Perhaps adding a Redis DB for a quick lookup and to keep the access token stateless might help.
+   We could store a timestamp of when the user logged out and reject any access tokens that were created before that timestamp
+   One timestamp per user with TTL = access token expiry - this should cover most cases
+  */
+  return verifyToken(accessToken, 'access');
+}
+
+/**
  * Register a new user
  */
 export async function registerUser(

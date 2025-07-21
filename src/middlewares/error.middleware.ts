@@ -1,13 +1,50 @@
-import { Request, Response, NextFunction } from 'express';
+import type { Request, Response, NextFunction } from 'express';
+
+import jwt from 'jsonwebtoken';
 
 import appConfig from '../config/app.config';
 import { ApiError } from '../utils/api.error';
+import { JwtTokenError } from '../utils/jwt-token.error';
 
 type ErrorResponse = {
   error: string;
   message: string;
   details?: Record<string, unknown | null>;
   stack?: string;
+};
+
+/**
+ * Error converter middleware
+ * Converts specific error types to ApiError for consistent error handling
+ */
+export const errorConverter = (
+  err: Error,
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  let convertedError = err;
+
+  // Convert JWT related errors to ApiError
+  if (err instanceof JwtTokenError) {
+    const { originalError, tokenType = '' } = err;
+    let message: string;
+
+    if (originalError instanceof jwt.TokenExpiredError) {
+      message = `Expired ${tokenType} token`;
+    } else if (originalError instanceof jwt.NotBeforeError) {
+      message = `${tokenType} token not yet valid`;
+      message = `Not yet valid ${tokenType} token`;
+    } else if (originalError instanceof jwt.JsonWebTokenError) {
+      message = `Invalid ${tokenType} token`;
+    } else {
+      message = 'Unknown JWT error';
+    }
+
+    convertedError = ApiError.unauthorized(message);
+  }
+
+  next(convertedError);
 };
 
 /**

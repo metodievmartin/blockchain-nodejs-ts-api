@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import { v4 as uuidV4 } from 'uuid';
 
 import appConfig from '../../config/app.config';
+import { JwtTokenError } from '../../utils/jwt-token.error';
 
 /**
  * Payload structure for JWT tokens
@@ -73,16 +74,28 @@ export const verifyToken = (
   token: string,
   type: 'access' | 'refresh'
 ): DecodedToken => {
-  const decoded = jwt.verify(token, appConfig.jwt.secret) as DecodedToken;
+  try {
+    const decoded = jwt.verify(token, appConfig.jwt.secret) as DecodedToken;
 
-  // Verify token type matches expected type
-  if (decoded.type !== type) {
-    throw new jwt.JsonWebTokenError(
-      `Invalid token type. Expected ${type} token.`
-    );
+    // Verify token type matches expected type
+    if (decoded.type !== type) {
+      throw new jwt.JsonWebTokenError(
+        `Invalid token type. Expected ${type} token.`
+      );
+    }
+
+    return decoded;
+  } catch (err) {
+    // log error
+    if (
+      err instanceof jwt.TokenExpiredError ||
+      err instanceof jwt.JsonWebTokenError ||
+      err instanceof jwt.NotBeforeError
+    ) {
+      throw new JwtTokenError(err, type);
+    }
+    throw err;
   }
-
-  return decoded;
 };
 
 /**

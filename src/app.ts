@@ -1,7 +1,7 @@
 import express from 'express';
 
 import appRouter from './routes';
-import { errorHandler } from './middlewares/error.middleware';
+import { errorConverter, errorHandler } from './middlewares/error.middleware';
 
 const app = express();
 
@@ -12,6 +12,7 @@ app.use(express.json());
 app.use(appRouter);
 
 // Global error handling middleware
+app.use(errorConverter);
 app.use(errorHandler);
 
 export default app;

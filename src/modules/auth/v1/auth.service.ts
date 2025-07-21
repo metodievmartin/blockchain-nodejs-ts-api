@@ -1,5 +1,3 @@
-import jwt from 'jsonwebtoken';
-
 import * as jwtRepository from './jwt.repository';
 import { ApiError } from '../../../utils/api.error';
 import * as userRepository from '../../users/v1/user.repository';
@@ -39,21 +37,8 @@ const ERRORS = {
 async function _validateRefreshToken(
   refreshToken: string
 ): Promise<DecodedToken> {
-  let decoded: DecodedToken;
-
-  try {
-    // Verify the refresh token
-    decoded = verifyToken(refreshToken, 'refresh');
-  } catch (error) {
-    if (error instanceof jwt.JsonWebTokenError) {
-      throw ApiError.unauthorized(ERRORS.INVALID_REFRESH_TOKEN);
-    } else if (error instanceof jwt.TokenExpiredError) {
-      throw ApiError.unauthorized(ERRORS.REFRESH_TOKEN_EXPIRED);
-    }
-
-    // Rethrow any other errors
-    throw error;
-  }
+  // Verify the refresh token - JWT errors will be handled by errorConverter middleware
+  const decoded = verifyToken(refreshToken, 'refresh');
 
   if (!decoded.jti) {
     throw ApiError.unauthorized(ERRORS.INVALID_REFRESH_TOKEN);

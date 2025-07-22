@@ -69,8 +69,10 @@ export async function findUserByEmailOrUsername(
  * Get public user data by ID
  * Returns only non-sensitive user properties
  */
-export async function getPublicUserById(id: string): Promise<PublicUser | null> {
-  const user = await db.user.findUnique({
+export async function getPublicUserById(
+  id: string
+): Promise<PublicUser | null> {
+  return db.user.findUnique({
     where: { id },
     select: {
       id: true,
@@ -80,8 +82,6 @@ export async function getPublicUserById(id: string): Promise<PublicUser | null> 
       updatedAt: true,
     },
   });
-
-  return user;
 }
 
 /**
@@ -97,6 +97,31 @@ export async function updateUser(
   return db.user.update({
     where: { id: userId },
     data,
+    select: {
+      id: true,
+      email: true,
+      username: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+}
+
+/**
+ * Update user password
+ * @param userId - The ID of the user to update
+ * @param passwordHash - The new hashed password
+ * @returns The updated public user data
+ */
+export async function updateUserPassword(
+  userId: string,
+  passwordHash: string
+): Promise<PublicUser> {
+  return db.user.update({
+    where: { id: userId },
+    data: {
+      passwordHash,
+    },
     select: {
       id: true,
       email: true,

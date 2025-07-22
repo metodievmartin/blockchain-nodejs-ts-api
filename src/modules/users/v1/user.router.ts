@@ -3,7 +3,7 @@ import { Router } from 'express';
 import * as userController from './user.controller';
 import { requireAuthentication } from '../../../middlewares/auth.middleware';
 import { validateBody } from '../../../middlewares/validate.middleware';
-import { updateUserProfileSchema } from './user.dto';
+import { updateUserProfileSchema, changePasswordSchema } from './user.dto';
 
 const router = Router();
 
@@ -24,6 +24,18 @@ router.put(
   requireAuthentication,
   validateBody(updateUserProfileSchema),
   userController.updateAuthenticatedUserProfile
+);
+
+/**
+ * PUT /users/me/password
+ * Changes the authenticated user's password
+ * Protected by authentication middleware
+ */
+router.put(
+  '/me/password',
+  requireAuthentication,
+  validateBody(changePasswordSchema),
+  userController.changeAuthenticatedUserPassword
 );
 
 export default router;

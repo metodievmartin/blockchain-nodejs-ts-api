@@ -66,3 +66,20 @@ export const updateUserProfileSchema = z.object({
  * Type for update user profile request
  */
 export type UpdateUserProfileRequest = z.infer<typeof updateUserProfileSchema>;
+
+/**
+ * Schema for validating password change request
+ */
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string(requiredStringError('Current password')),
+    newPassword: strongPasswordSchema,
+  })
+  .refine((data) => data.currentPassword !== data.newPassword, {
+    path: ['newPassword'],
+    message: 'New password must be different from current password',
+  });
+/**
+ * Type for password change request
+ */
+export type ChangePasswordRequest = z.infer<typeof changePasswordSchema>;

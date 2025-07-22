@@ -1,6 +1,11 @@
-import { type PublicUser, type UpdateUserProfileRequest } from './user.dto';
+import {
+  type PublicUser,
+  type UpdateUserProfileRequest,
+  type ChangePasswordRequest,
+} from './user.dto';
 import { ApiError } from '../../../utils/api.error';
 import * as userRepository from './user.repository';
+import { comparePasswords, hashPassword } from '../../shared/auth';
 
 /**
  * Get a user's public profile by ID
@@ -63,4 +68,54 @@ export async function updateUserProfile(
 
   // Update user profile
   return userRepository.updateUser(userId, data);
+}
+
+/**
+ * Change a user's password
+ *
+ * @param userId - The ID of the user
+ * @param data - The current and new password
+ * @returns The updated public user data
+ * @throws ApiError if user is not found or if current password is incorrect
+ */
+export async function changeUserPassword(
+  userId: string,
+  data: ChangePasswordRequest
+): Promise<PublicUser> {
+  if (!data || !data.currentPassword || !data.newPassword) {
+    throw ApiError.badRequest(
+      'All fields (currentPassword, newPassword) must be provided'
+    );
+  }
+
+  if (data.currentPassword === data.newPassword) {
+    throw ApiError.badRequest(
+      'New password must be different from current password'
+    );
+  }
+
+  // Check if the user exists with full user data
+  const existingUser = await userRepository.findUserById(userId);
+  if (!existingUser) {
+    throw ApiError.notFound(`User with ID ${userId} not found`);
+  }
+
+  // Verify the current password
+  const isPasswordValid = await comparePasswords(
+    data.currentPassword,
+    existingUser.passwordHash
+  );
+
+  if (!isPasswordValid) {
+    throw ApiError.unauthorized('Current password is incorrect');
+  }
+
+  // Hash the new password
+  const passwordHash = await hashPassword(data.newPassword);
+
+  // TODO: Revoke all access and refresh tokens?
+  // TODO: Issue a new access and refresh tokens
+
+  // Update the password
+  return userRepository.updateUserPassword(userId, passwordHash);
 }

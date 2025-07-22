@@ -1,9 +1,12 @@
 import { type Request, type Response } from 'express';
 
+import {
+  type UpdateUserProfileRequest,
+  type ChangePasswordRequest,
+} from './user.dto';
 import * as userService from './user.service';
 import { ApiError } from '../../../utils/api.error';
 import { catchAsync } from '../../../utils/catch-async';
-import { type UpdateUserProfileRequest } from './user.dto';
 
 /**
  * GET /users/me
@@ -50,5 +53,23 @@ export const updateAuthenticatedUserProfile = catchAsync(
       createdAt,
       updatedAt,
     });
+  }
+);
+
+/**
+ * PUT /users/me/password
+ * Changes the authenticated user's password
+ */
+export const changeAuthenticatedUserPassword = catchAsync(
+  async (req: Request<{}, any, ChangePasswordRequest>, res: Response) => {
+    // The user object is added to the request by the requireAuthentication middleware
+    if (!req.user) {
+      throw ApiError.unauthorized('Authentication required');
+    }
+
+    // Change user password
+    await userService.changeUserPassword(req.user.id, req.body);
+
+    return res.status(204).send();
   }
 );

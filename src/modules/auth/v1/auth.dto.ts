@@ -1,25 +1,17 @@
 import { z } from 'zod';
+import {
+  emailSchema,
+  usernameSchema,
+  strongPasswordSchema,
+} from '../../users/v1/user.dto';
 
 /**
  * Registration DTOs
  */
 export const RegisterRequestSchema = z.object({
-  email: z.email('Invalid email address'),
-  username: z
-    .string('Username should be a string')
-    .min(3, 'Username should be between 3 and 50 characters long')
-    .max(50, 'Username should be between 3 and 50 characters long')
-    .regex(
-      /^[a-zA-Z0-9_-]+$/,
-      'Username can only contain letters, numbers, hyphens, and underscores'
-    ),
-  password: z
-    .string('Password should be a string')
-    .min(8, 'Password should be at least 8 characters long')
-    .regex(
-      /[!@#$%^&*(),.?":{}|<>]/,
-      'Password must include at least one special character'
-    ),
+  email: emailSchema,
+  username: usernameSchema,
+  password: strongPasswordSchema,
 });
 
 export type RegisterRequestBody = z.infer<typeof RegisterRequestSchema>;
@@ -37,8 +29,13 @@ export type RegisterResponse = z.infer<typeof RegisterResponseSchema>;
  * Login DTOs
  */
 export const LoginRequestSchema = z.object({
-  email: z.email('Invalid email address'),
-  password: z.string('Password should be a string'),
+  email: emailSchema,
+  password: z.string({
+    error: ({ input }) =>
+      input === undefined
+        ? 'Password is required'
+        : 'Password should be a string',
+  }),
 });
 
 export type LoginRequestBody = z.infer<typeof LoginRequestSchema>;

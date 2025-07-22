@@ -65,6 +65,43 @@ async function _validateRefreshToken(
 }
 
 /**
+ * Creates a new session for a user by generating access and refresh tokens
+ * and storing the refresh token in the database
+ *
+ * @param userId - The ID of the user to create a session for
+ * @returns Object containing access token, refresh token, and expiration time
+ */
+async function _createNewSession(userId: string): Promise<{
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+}> {
+  if (!userId) {
+    throw new Error('Cannot create session without user ID');
+  }
+
+  // Generate access token
+  const accessToken = signAccessToken(userId);
+
+  // Generate refresh token
+  const { token: refreshToken, jti } = signRefreshToken(userId);
+
+  // Store refresh token in database
+  await jwtRepository.createRefreshToken({
+    tokenId: jti,
+    userId: userId,
+    expiresAt: calculateRefreshTokenExpiry(),
+  });
+
+  // Return JWT tokens
+  return {
+    accessToken,
+    refreshToken,
+    expiresIn: getAccessTokenExpiry(true),
+  };
+}
+
+/**
  * Verifies an access token and returns the decoded token
  *
  * @param accessToken - The access token to verify
@@ -143,25 +180,8 @@ export async function loginUser(
     throw ApiError.unauthorized(invalidCredentialsMsg);
   }
 
-  // Generate access token
-  const accessToken = signAccessToken(user.id);
-
-  // Generate refresh token
-  const { token: refreshToken, jti } = signRefreshToken(user.id);
-
-  // Store refresh token in database
-  await jwtRepository.createRefreshToken({
-    tokenId: jti,
-    userId: user.id,
-    expiresAt: calculateRefreshTokenExpiry(),
-  });
-
-  // Return JWT tokens
-  return {
-    accessToken,
-    refreshToken,
-    expiresIn: getAccessTokenExpiry(true),
-  };
+  // Create a new session for the user
+  return _createNewSession(user.id);
 }
 
 /**

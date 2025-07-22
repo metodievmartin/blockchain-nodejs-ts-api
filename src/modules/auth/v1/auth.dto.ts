@@ -1,9 +1,11 @@
 import { z } from 'zod';
+
 import {
   emailSchema,
   usernameSchema,
   strongPasswordSchema,
 } from '../../users/v1/user.dto';
+import { requiredStringError } from '../../../utils/zod.utils';
 
 /**
  * Registration DTOs
@@ -30,12 +32,7 @@ export type RegisterResponse = z.infer<typeof RegisterResponseSchema>;
  */
 export const LoginRequestSchema = z.object({
   email: emailSchema,
-  password: z.string({
-    error: ({ input }) =>
-      input === undefined
-        ? 'Password is required'
-        : 'Password should be a string',
-  }),
+  password: z.string(requiredStringError('Password')),
 });
 
 export type LoginRequestBody = z.infer<typeof LoginRequestSchema>;
@@ -52,7 +49,7 @@ export type LoginResponse = z.infer<typeof LoginResponseSchema>;
  * Refresh Token DTOs
  */
 export const RefreshTokenRequestSchema = z.object({
-  refreshToken: z.string('Refresh token should be a string'),
+  refreshToken: z.string(requiredStringError('Refresh token')),
 });
 
 export type RefreshTokenRequestBody = z.infer<typeof RefreshTokenRequestSchema>;
@@ -68,7 +65,7 @@ export type RefreshTokenResponse = z.infer<typeof RefreshTokenResponseSchema>;
  * Logout DTOs
  */
 export const LogoutRequestSchema = z.object({
-  refreshToken: z.string('Refresh token should be a string'),
+  refreshToken: z.string(requiredStringError('Refresh token')),
 });
 
 export type LogoutRequestBody = z.infer<typeof LogoutRequestSchema>;

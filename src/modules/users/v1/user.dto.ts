@@ -2,6 +2,14 @@ import { z } from 'zod';
 
 import { type User } from '../../../../prisma/generated/client';
 
+import {
+  requiredStringError,
+  VALID_USERNAME_PATTERN,
+  INVALID_USERNAME_FORMAT_MESSAGE,
+  STRONG_PASSWORD_PATTERN,
+  INVALID_PASSWORD_FORMAT_MESSAGE,
+} from '../../../utils/zod.utils';
+
 /**
  * PublicUser type - only includes non-sensitive user properties
  */
@@ -33,34 +41,18 @@ export const emailSchema = z.email({
  * Reusable username schema with validation rules and custom error messages
  */
 export const usernameSchema = z
-  .string({
-    error: ({ input }) =>
-      input === undefined
-        ? 'Username is required'
-        : 'Username should be a string',
-  })
+  .string(requiredStringError('Username'))
   .min(3, 'Username should be between 3 and 50 characters long')
   .max(50, 'Username should be between 3 and 50 characters long')
-  .regex(
-    /^[a-zA-Z0-9_-]+$/,
-    'Username can only contain letters, numbers, hyphens, and underscores'
-  );
+  .regex(VALID_USERNAME_PATTERN, INVALID_USERNAME_FORMAT_MESSAGE);
 
 /**
  * Reusable password schema with validation rules and custom error messages
  */
 export const strongPasswordSchema = z
-  .string({
-    error: ({ input }) =>
-      input === undefined
-        ? 'Password is required'
-        : 'Password should be a string',
-  })
+  .string(requiredStringError('Password'))
   .min(8, 'Password must be at least 8 characters long')
-  .regex(
-    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])[A-Za-z\d!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]+$/,
-    'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'
-  );
+  .regex(STRONG_PASSWORD_PATTERN, INVALID_PASSWORD_FORMAT_MESSAGE);
 
 /**
  * Schema for validating update user profile request

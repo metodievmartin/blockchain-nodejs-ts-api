@@ -7,17 +7,25 @@ const db = getOrCreateDB();
 
 /**
  * Create a new user in the database
+ * Returns only non-sensitive user properties
  */
 export async function createUser(userData: {
   email: string;
   username: string;
   passwordHash: string;
-}): Promise<User> {
+}): Promise<PublicUser> {
   return db.user.create({
     data: {
       email: userData.email,
       username: userData.username,
       passwordHash: userData.passwordHash,
+    },
+    select: {
+      id: true,
+      email: true,
+      username: true,
+      createdAt: true,
+      updatedAt: true,
     },
   });
 }

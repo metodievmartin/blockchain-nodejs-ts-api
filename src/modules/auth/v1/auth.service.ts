@@ -16,6 +16,7 @@ import {
   LoginRequestBody,
   LoginResponse,
 } from './auth.dto';
+import appConfig from '../../../config/app.config';
 
 // Error messages
 const ERRORS = {
@@ -86,11 +87,38 @@ async function _createNewSession(userId: string): Promise<{
   // Generate refresh token
   const { token: refreshToken, jti } = signRefreshToken(userId);
 
-  // Store refresh token in database
-  await jwtRepository.createRefreshToken({
-    tokenId: jti,
-    userId: userId,
-    expiresAt: calculateRefreshTokenExpiry(),
+  // Use transaction to handle session management
+  await jwtRepository.withTransaction(async (tx) => {
+    // Get the number of active sessions for the user
+    const activeSessionsCount = await jwtRepository.getActiveUserSessionsCount(
+      userId,
+      tx
+    );
+
+    // If the user has reached the maximum number of sessions, revoke the oldest one
+    if (activeSessionsCount >= appConfig.jwt.maxSessionsPerUser) {
+      const oldestSession = await jwtRepository.getOldestActiveUserSession(
+        userId,
+        tx
+      );
+
+      if (!oldestSession) {
+        // We should never get to this state so cancel the entire transaction
+        throw new Error('Could not find oldest active session');
+      }
+
+      await jwtRepository.revokeRefreshToken(oldestSession.tokenId, tx);
+    }
+
+    // Create the new refresh token
+    await jwtRepository.createRefreshToken(
+      {
+        tokenId: jti,
+        userId,
+        expiresAt: calculateRefreshTokenExpiry(),
+      },
+      tx
+    );
   });
 
   // Return JWT tokens

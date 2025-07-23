@@ -29,6 +29,9 @@ const appConfig = {
     refreshToken: {
       expiresIn: '7d',
     },
+    
+    // Maximum number of active sessions per user
+    maxSessionsPerUser: 5,
   },
   
   security: {

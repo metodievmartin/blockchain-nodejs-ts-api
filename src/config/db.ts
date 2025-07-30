@@ -1,6 +1,6 @@
 import logger from '../config/logger';
 import appConfig from '../config/app.config';
-import { PrismaClient } from '../../prisma/generated/client';
+import { PrismaClient, Prisma } from '../../prisma/generated/client';
 
 let _prisma: PrismaClient | null = null;
 
@@ -46,4 +46,16 @@ export async function connectDB(dbUrl?: string): Promise<PrismaClient> {
 export async function disconnectDB(): Promise<void> {
   const db = getOrCreateDB();
   await db.$disconnect();
+}
+
+/**
+ * Executes a callback within a database transaction
+ * @param callback - Function to execute within the transaction - receives Prisma Transaction client
+ * @returns The result of the callback function
+ */
+export async function withTransaction<T>(
+  callback: (tx: Prisma.TransactionClient) => Promise<T>
+): Promise<T> {
+  const db = getOrCreateDB();
+  return db.$transaction(callback);
 }

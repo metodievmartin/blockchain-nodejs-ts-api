@@ -41,6 +41,7 @@ const EnvSchema = z.object({
     .positive('Invalid port - should be a positive number')
     .default(3000),
   DATABASE_URL: z.url('Invalid or missing DB url'),
+  REDIS_URL: z.url('Invalid or missing Redis URL'),
   SALT_ROUNDS: z.coerce.number().int().positive().default(10),
   JWT_SECRET: z
     .string('Invalid or missing secret')

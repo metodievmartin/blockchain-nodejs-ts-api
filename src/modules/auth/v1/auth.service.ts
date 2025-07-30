@@ -1,4 +1,4 @@
-import * as jwtRepository from './jwt.repository';
+import * as jwtRepository from '../../shared/jwt.repository';
 import { ApiError } from '../../../utils/api.error';
 import * as userRepository from '../../users/v1/user.repository';
 import { hashPassword, comparePasswords } from '../../shared/auth';
@@ -17,11 +17,18 @@ import {
   LoginResponse,
 } from './auth.dto';
 import appConfig from '../../../config/app.config';
+import {
+  isSessionRevoked,
+  revokeSession,
+  revokeSessions,
+} from '../../shared/session.repository';
+import { withTransaction } from '../../../config/db';
 
 // Error messages
 const ERRORS = {
   INVALID_CREDENTIALS: 'Incorrect email or password',
   INVALID_REFRESH_TOKEN: 'Invalid refresh token',
+  INVALID_ACCESS_TOKEN: 'Invalid access token',
   REFRESH_TOKEN_EXPIRED: 'Refresh token has expired',
   AUTHENTICATION_REQUIRED: 'Authentication required',
 };
@@ -81,15 +88,15 @@ async function _createNewSession(userId: string): Promise<{
     throw new Error('Cannot create session without user ID');
   }
 
-  // Generate access token
-  const accessToken = signAccessToken(userId);
-
-  // Generate refresh token
+  // Generate refresh token first to get the session ID (jti)
   const { token: refreshToken, jti } = signRefreshToken(userId);
 
+  // Generate access token with session ID
+  const accessToken = signAccessToken(userId, jti);
+
   // Use transaction to handle session management
-  await jwtRepository.withTransaction(async (tx) => {
-    // Get the number of active sessions for the user
+  await withTransaction(async (tx) => {
+    // Count active sessions within the transaction
     const activeSessionsCount = await jwtRepository.getActiveUserSessionsCount(
       userId,
       tx
@@ -108,6 +115,9 @@ async function _createNewSession(userId: string): Promise<{
       }
 
       await jwtRepository.revokeRefreshToken(oldestSession.tokenId, tx);
+
+      // Revoke the session in Redis
+      await revokeSession(oldestSession.tokenId);
     }
 
     // Create the new refresh token
@@ -136,16 +146,23 @@ async function _createNewSession(userId: string): Promise<{
  * @returns The decoded token if valid
  * @throws JwtTokenError if token is invalid or expired
  */
-export function verifyAccessToken(accessToken: string): DecodedToken {
-  /*
-   Apart from purely verifying the token as valid JWT,
-   should also consider a way of invalidating the access token when the refresh token is revoked.
-   Problem: even if the refresh token is revoked, the access token can still be used for a short time until it expires.
-   Perhaps adding a Redis DB for a quick lookup and to keep the access token stateless might help.
-   We could store a timestamp of when the user logged out and reject any access tokens that were created before that timestamp
-   One timestamp per user with TTL = access token expiry - this should cover most cases
-  */
-  return verifyToken(accessToken, 'access');
+export async function verifyAccessToken(
+  accessToken: string
+): Promise<DecodedToken> {
+  const decoded = verifyToken(accessToken, 'access');
+
+  if (!decoded.sid) {
+    throw ApiError.unauthorized(ERRORS.INVALID_ACCESS_TOKEN);
+  }
+
+  // Check if the session to which this token belongs is revoked
+  const isRevoked = await isSessionRevoked(decoded.sid);
+
+  if (isRevoked) {
+    throw ApiError.unauthorized(ERRORS.INVALID_ACCESS_TOKEN);
+  }
+
+  return decoded;
 }
 
 /**
@@ -222,7 +239,7 @@ export async function refreshAccessToken(
   const decodedToken = await _validateRefreshToken(refreshToken);
 
   // Generate new access token
-  const accessToken = signAccessToken(decodedToken.userId);
+  const accessToken = signAccessToken(decodedToken.userId, decodedToken.jti);
 
   return {
     accessToken,
@@ -239,11 +256,23 @@ export async function logoutUser(refreshToken: string): Promise<void> {
 
   // Revoke the token
   await jwtRepository.revokeRefreshToken(decodedToken.jti);
+  await revokeSession(decodedToken.jti);
 }
 
 /**
- * Logout user from all sessions by revoking all their refresh tokens
+ * Logs out a user from all sessions by revoking all their refresh tokens
+ * @param userId - The user ID to logout from all sessions
  */
 export async function logoutUserFromAllSessions(userId: string): Promise<void> {
+  // Get all active refresh tokens for the user to revoke their sessions
+  const activeTokens = await jwtRepository.getActiveUserRefreshTokens(userId);
+  const sessionIds = activeTokens.map((token) => token.tokenId);
+
+  // Revoke all refresh tokens in the database
   await jwtRepository.revokeAllUserRefreshTokens(userId);
+
+  // Revoke all sessions in Redis
+  if (sessionIds.length > 0) {
+    await revokeSessions(sessionIds);
+  }
 }

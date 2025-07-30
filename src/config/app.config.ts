@@ -19,6 +19,10 @@ const appConfig = {
     url: env.DATABASE_URL,
   },
 
+  redis: {
+    url: env.REDIS_URL,
+  },
+
   jwt: {
     secret: env.JWT_SECRET,
 

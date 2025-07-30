@@ -6,6 +6,9 @@ import {
 import { ApiError } from '../../../utils/api.error';
 import * as userRepository from './user.repository';
 import { comparePasswords, hashPassword } from '../../shared/auth';
+import { revokeSessions } from '../../shared/session.repository';
+import * as jwtRepository from '../../shared/jwt.repository';
+import { withTransaction } from '../../../config/db';
 
 /**
  * Get a user's public profile by ID
@@ -81,7 +84,7 @@ export async function updateUserProfile(
 export async function changeUserPassword(
   userId: string,
   data: ChangePasswordRequest
-): Promise<PublicUser> {
+): Promise<void> {
   if (!data || !data.currentPassword || !data.newPassword) {
     throw ApiError.badRequest(
       'All fields (currentPassword, newPassword) must be provided'
@@ -113,9 +116,26 @@ export async function changeUserPassword(
   // Hash the new password
   const passwordHash = await hashPassword(data.newPassword);
 
-  // TODO: Revoke all access and refresh tokens?
-  // TODO: Issue a new access and refresh tokens
+  // Get all active sessions before starting transaction
+  const activeTokens = await jwtRepository.getActiveUserRefreshTokens(userId);
+  const sessionIds = activeTokens.map((token) => token.tokenId);
 
-  // Update the password
-  return userRepository.updateUserPassword(userId, passwordHash);
+  // Perform all database operations in a transaction for atomicity
+  await withTransaction(async (tx) => {
+    // Revoke all refresh tokens in the database
+    await jwtRepository.revokeAllUserRefreshTokens(userId, tx);
+
+    // Update the password
+    await userRepository.updateUserPassword(userId, passwordHash, tx);
+  });
+
+  try {
+    // After successful database operations, revoke sessions in Redis
+    // This is done outside the transaction since Redis is a separate system
+    await revokeSessions(sessionIds);
+  } catch (error) {
+    // If Redis operations failed after successful DB transaction,
+    // the user's password is still changed, and sessions will expire naturally
+    // think of retry logic
+  }
 }

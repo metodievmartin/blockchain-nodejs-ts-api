@@ -1,9 +1,16 @@
-import { type User } from '../../../../prisma/generated/client';
 import { type PublicUser, type UpdateUserProfileRequest } from './user.dto';
+import {
+  type User,
+  type PrismaClient,
+  type Prisma,
+} from '../../../../prisma/generated/client';
 
 import { getOrCreateDB } from '../../../config/db';
 
 const db = getOrCreateDB();
+
+// Type for client parameter that can be either PrismaClient or TransactionClient
+type DbClient = PrismaClient | Prisma.TransactionClient;
 
 /**
  * Create a new user in the database
@@ -119,13 +126,15 @@ export async function updateUser(
  * Update user password
  * @param userId - The ID of the user to update
  * @param passwordHash - The new hashed password
+ * @param client - Optional Prisma client or transaction client
  * @returns The updated public user data
  */
 export async function updateUserPassword(
   userId: string,
-  passwordHash: string
+  passwordHash: string,
+  client: DbClient = db
 ): Promise<PublicUser> {
-  return db.user.update({
+  return client.user.update({
     where: { id: userId },
     data: {
       passwordHash,

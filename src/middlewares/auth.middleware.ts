@@ -1,10 +1,11 @@
 import type { Request, Response, NextFunction } from 'express';
 
+import logger from '../config/logger';
 import { ApiError } from '../utils/api.error';
 import { catchAsync } from '../utils/catch-async';
-import { verifyAccessToken } from '../modules/auth/v1/auth.service';
-import { fetchPublicUser } from '../modules/users/v1/user.service';
 import { type PublicUser } from '../modules/users/v1/user.dto';
+import { fetchPublicUser } from '../modules/users/v1/user.service';
+import { verifyAccessToken } from '../modules/auth/v1/auth.service';
 
 // Extend the Express Request type to include user property
 /* eslint-disable @typescript-eslint/no-namespace */
@@ -38,7 +39,7 @@ export const requireAuthentication = catchAsync(
     const token = parts[1];
 
     // Verify the token using auth service
-    const decoded = verifyAccessToken(token);
+    const decoded = await verifyAccessToken(token);
 
     if (!decoded.userId) {
       throw ApiError.unauthorized('Malformed authentication token');
@@ -47,6 +48,7 @@ export const requireAuthentication = catchAsync(
     try {
       req.user = await fetchPublicUser(decoded.userId);
     } catch (err) {
+      logger.error(err);
       throw ApiError.unauthorized(
         'User associated with this token could not be found'
       );

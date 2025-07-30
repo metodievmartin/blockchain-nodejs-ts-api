@@ -2,26 +2,15 @@ import type {
   PrismaClient,
   RefreshToken,
   Prisma,
-} from '../../../../prisma/generated/client';
+} from '../../../prisma/generated/client';
 
-import { getOrCreateDB } from '../../../config/db';
+import { getOrCreateDB } from '../../config/db';
 
 // Get DB instance once at the top level
 const db = getOrCreateDB();
 
 // Type for client parameter that can be either PrismaClient or TransactionClient
 type DbClient = PrismaClient | Prisma.TransactionClient;
-
-/**
- * Executes a callback within a database transaction
- * @param callback - Function to execute within the transaction - receives Prisma Transaction client
- * @returns The result of the callback function
- */
-export async function withTransaction<T>(
-  callback: (tx: Prisma.TransactionClient) => Promise<T>
-): Promise<T> {
-  return db.$transaction(callback);
-}
 
 /**
  * Creates a new refresh token in the database
@@ -140,6 +129,72 @@ export async function getOldestActiveUserSession(
       createdAt: 'asc', // Oldest first
     },
   });
+}
+
+/**
+ * Gets all active refresh tokens for a user
+ * @param userId - The user ID to find active tokens for
+ * @param client - Optional Prisma client or transaction client
+ * @returns Array of active refresh tokens
+ */
+export async function getActiveUserRefreshTokens(
+  userId: string,
+  client: DbClient = db
+): Promise<RefreshToken[]> {
+  return client.refreshToken.findMany({
+    where: {
+      userId,
+      revokedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    orderBy: {
+      createdAt: 'asc',
+    },
+  });
+}
+
+/**
+ * Finds and revokes the oldest active session for a user in a single query
+ * @param userId - The user ID to revoke the oldest session for
+ * @param client - Optional Prisma client or transaction client
+ * @returns The number of sessions revoked (0 or 1)
+ */
+export async function revokeOldestActiveUserSession(
+  userId: string,
+  client: DbClient = db
+): Promise<number> {
+  // First, find the oldest active session's tokenId
+  const oldestSession = await client.refreshToken.findFirst({
+    where: {
+      userId,
+      revokedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    orderBy: {
+      createdAt: 'asc', // Oldest first
+    },
+    select: {
+      tokenId: true,
+    },
+  });
+
+  // If no active session found, return 0
+  if (!oldestSession) {
+    return 0;
+  }
+
+  // Update only this specific token using updateMany with exact tokenId match
+  const result = await client.refreshToken.updateMany({
+    where: {
+      tokenId: oldestSession.tokenId,
+      revokedAt: null, // Double-check it's still not revoked
+    },
+    data: {
+      revokedAt: new Date(),
+    },
+  });
+
+  return result.count; // Will be 1 if successful, 0 if already revoked
 }
 
 /**

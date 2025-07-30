@@ -11,6 +11,7 @@ export interface JwtPayload {
   userId: string;
   type: 'access' | 'refresh';
   jti?: string; // JWT ID for refresh tokens
+  sid?: string; // Session ID for access tokens (links to refresh token jti)
 }
 
 /**
@@ -20,6 +21,7 @@ export interface DecodedToken {
   userId: string;
   type: 'access' | 'refresh';
   jti?: string;
+  sid?: string;
   iat: number;
   exp: number;
 }
@@ -27,12 +29,14 @@ export interface DecodedToken {
 /**
  * Signs an access token for a user
  * @param userId - The user ID to include in the token
+ * @param sessionId - The session ID (refresh token jti) to link this access token to
  * @returns The signed JWT access token
  */
-export const signAccessToken = (userId: string): string => {
+export const signAccessToken = (userId: string, sessionId: string): string => {
   const payload: JwtPayload = {
     userId,
     type: 'access',
+    sid: sessionId, // Link access token to session
   };
 
   return jwt.sign(payload, appConfig.jwt.secret, {
@@ -108,19 +112,13 @@ export const calculateRefreshTokenExpiry = (): Date => {
 };
 
 /**
- * Helper to parse JWT expiration time string to seconds/milliseconds
- * @param inSeconds - Whether to return the expiration time in seconds
- * @returns Expiration time in seconds or milliseconds
+ * Helper to parse JWT expiration time string to seconds
+ * @param expiration - JWT expiration string (e.g., '15m', '7d')
+ * @returns Seconds representation of the expiration time
  */
-export const getAccessTokenExpiry = (inSeconds?: boolean): number => {
-  const parsed = parseExpirationToMs(appConfig.jwt.accessToken.expiresIn);
-
-  if (inSeconds) {
-    return parsed / 1000;
-  }
-
-  return parsed;
-};
+export function parseExpirationToSeconds(expiration: string): number {
+  return Math.floor(parseExpirationToMs(expiration) / 1000);
+}
 
 /**
  * Helper to parse JWT expiration time string to milliseconds
@@ -144,3 +142,18 @@ function parseExpirationToMs(expiration: string): number {
       return 0; // Default case, though this should never happen with proper config
   }
 }
+
+/**
+ * Helper to parse JWT expiration time string to seconds/milliseconds
+ * @param inSeconds - Whether to return the expiration time in seconds
+ * @returns Expiration time in seconds or milliseconds
+ */
+export const getAccessTokenExpiry = (inSeconds?: boolean): number => {
+  const parsed = parseExpirationToMs(appConfig.jwt.accessToken.expiresIn);
+
+  if (inSeconds) {
+    return parseExpirationToSeconds(appConfig.jwt.accessToken.expiresIn);
+  }
+
+  return parsed;
+};

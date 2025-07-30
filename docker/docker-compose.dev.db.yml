@@ -1,0 +1,27 @@
+# Spins up a local Postgres instance for development.
+
+services:
+  postgres:
+    image: postgres:latest
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:8.2-rc1-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+      - ../redis/redis.conf.dev:/usr/local/etc/redis/redis.conf.dev
+      - ../redis/users.acl.dev:/usr/local/etc/redis/users.acl.dev
+    command: [ "redis-server", "/usr/local/etc/redis/redis.conf.dev" ]
+
+volumes:
+  postgres-data:
+  redis-data:

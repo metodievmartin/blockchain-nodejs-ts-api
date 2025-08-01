@@ -6,7 +6,7 @@
  */
 import { getEtherscanProvider } from './provider';
 import { mapEtherscanTransactionToDB } from './transaction-mapper';
-import { saveTransactionBatch } from '../v1/blockchain.repository';
+import { saveTransactionBatch } from '../tx/v1/tx.repository';
 import appConfig from '../../../config/app.config';
 import logger from '../../../config/logger';
 
@@ -16,7 +16,7 @@ import logger from '../../../config/logger';
  * @param address - Ethereum address
  * @param gaps - Array of gap objects with fromBlock and toBlock
  */
-export function processLargeGapsInBackground(
+export function processGapsInBackground(
   address: string,
   gaps: Array<{ fromBlock: number; toBlock: number }>
 ): void {

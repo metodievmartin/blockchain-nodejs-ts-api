@@ -4,17 +4,16 @@
  * HTTP request handlers for blockchain endpoints
  */
 import { Request, Response } from 'express';
-import { catchAsync } from '../../../utils/catch-async';
-import * as blockchainService from './blockchain.service';
+import { catchAsync } from '../../../../utils/catch-async';
+import * as txService from './tx.service';
 import {
-  GetTransactionsQuerySchema,
   AddressParamsSchema,
+  GetTransactionsQuerySchema,
   GetTransactionsResponse,
   BalanceResponse,
   GetCoverageResponse,
-} from './blockchain.dto';
-import { ApiError } from '../../../utils/api.error';
-import logger from '../../../config/logger';
+} from './tx.dto';
+import logger from '../../../../config/logger';
 
 /**
  * Get transactions for an address
@@ -35,7 +34,7 @@ export const getTransactions = catchAsync(
       userAgent: req.get('User-Agent'),
     });
 
-    const result = await blockchainService.getTransactions(
+    const result = await txService.getTransactions(
       address,
       query.from,
       query.to,
@@ -61,7 +60,6 @@ export const getTransactions = catchAsync(
  * GET /api/v1/eth/address/:address/balance
  */
 export const getBalance = catchAsync(async (req: Request, res: Response) => {
-  // Validate path parameters
   const { address } = AddressParamsSchema.parse(req.params);
 
   logger.info('Balance request received', {
@@ -70,7 +68,7 @@ export const getBalance = catchAsync(async (req: Request, res: Response) => {
     userAgent: req.get('User-Agent'),
   });
 
-  const result = await blockchainService.getBalance(address);
+  const result = await txService.getBalance(address);
 
   const response: BalanceResponse = {
     success: true,
@@ -81,36 +79,36 @@ export const getBalance = catchAsync(async (req: Request, res: Response) => {
 });
 
 /**
- * Get coverage information for an address
- * GET /api/v1/blockchain/address/:address/coverage
+ * Get address coverage
+ * GET /api/v1/eth/address/:address/coverage
  */
-export const getCoverage = catchAsync(async (req: Request, res: Response) => {
-  // Validate path parameters
-  const { address } = AddressParamsSchema.parse(req.params);
+export const getAddressCoverage = catchAsync(
+  async (req: Request, res: Response) => {
+    const { address } = AddressParamsSchema.parse(req.params);
 
-  logger.info('Coverage request received', {
-    address,
-    ip: req.ip,
-    userAgent: req.get('User-Agent'),
-  });
+    logger.info('Coverage request received', {
+      address,
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+    });
 
-  const result = await blockchainService.getAddressCoverage(address);
+    const result = await txService.getAddressCoverage(address);
 
-  const response: GetCoverageResponse = {
-    success: true,
-    data: result,
-  };
+    const response: GetCoverageResponse = {
+      success: true,
+      data: result,
+    };
 
-  res.json(response);
-});
+    res.json(response);
+  }
+);
 
 /**
- * Get transaction count for an address
- * GET /api/v1/blockchain/address/:address/count
+ * Get stored transaction count
+ * GET /api/v1/eth/address/:address/count
  */
-export const getTransactionCount = catchAsync(
+export const getStoredTransactionCount = catchAsync(
   async (req: Request, res: Response) => {
-    // Validate path parameters
     const { address } = AddressParamsSchema.parse(req.params);
 
     logger.info('Transaction count request received', {
@@ -119,14 +117,11 @@ export const getTransactionCount = catchAsync(
       userAgent: req.get('User-Agent'),
     });
 
-    const count = await blockchainService.getStoredTransactionCount(address);
+    const count = await txService.getStoredTransactionCount(address);
 
     res.json({
       success: true,
-      data: {
-        address,
-        count,
-      },
+      data: { count },
     });
   }
 );

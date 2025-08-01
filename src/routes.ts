@@ -3,7 +3,7 @@ import { Router } from 'express';
 import appConfig from './config/app.config';
 import authV1Router from './modules/auth/v1/auth.router';
 import userV1Router from './modules/users/v1/user.router';
-import blockchainV1Router from './modules/blockchain/v1/blockchain.router';
+import txV1Router from './modules/eth/tx/v1/tx.router';
 
 const appRouter = Router();
 
@@ -12,7 +12,7 @@ const v1 = Router();
 
 v1.use('/auth', authV1Router);
 v1.use('/users', userV1Router);
-v1.use('/eth', blockchainV1Router);
+v1.use('/eth/address', txV1Router);
 
 // Mount versioned routes
 appRouter.use('/api/v1', v1);

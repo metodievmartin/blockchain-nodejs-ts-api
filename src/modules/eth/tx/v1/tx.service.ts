@@ -7,28 +7,27 @@ import { ethers } from 'ethers';
 import {
   getEthereumProvider,
   getEtherscanProvider,
-  getAddressCreationBlock,
-} from '../shared/provider';
+} from '../../shared/provider';
 import {
   validateAndNormalizeAddress,
   validateBlockRange,
-} from '../shared/address-validator';
+} from '../../shared/address-validator';
 import {
   mapEthersTransactionToDB,
   mapDBTransactionToAPI,
   mapEtherscanTransactionToDB,
   mapEtherscanTransactionToAPI,
-} from '../shared/transaction-mapper';
+} from '../../shared/transaction-mapper';
 import {
   getCachedBalance,
   setCachedBalance,
   getCachedPaginatedTransactionQuery,
   setCachedPaginatedTransactionQuery,
-} from '../shared/cache.service';
+} from '../../shared/cache.service';
 import {
-  processLargeGapsInBackground,
+  processGapsInBackground,
   processGapInBatches,
-} from '../shared/background-processor';
+} from '../../shared/background-processor';
 import {
   findGaps,
   getExistingTransactions,
@@ -36,14 +35,10 @@ import {
   saveTransactionBatch,
   getTransactionCount,
   getCoverageRanges,
-} from './blockchain.repository';
-import {
-  ProcessingResult,
-  TransactionResponse,
-  CoverageRange,
-} from './blockchain.dto';
-import appConfig from '../../../config/app.config';
-import logger from '../../../config/logger';
+} from './tx.repository';
+import { ProcessingResult, TransactionResponse, CoverageRange } from './tx.dto';
+import appConfig from '../../../../config/app.config';
+import logger from '../../../../config/logger';
 
 /**
  * Get paginated transactions for an address
@@ -230,7 +225,7 @@ export async function getTransactions(
     );
 
     // Start background processing to fill database
-    processLargeGapsInBackground(normalizedAddress, gaps);
+    processGapsInBackground(normalizedAddress, gaps);
 
     logger.info('Returned Etherscan result, background processing started', {
       address: normalizedAddress,

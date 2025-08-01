@@ -1,16 +1,16 @@
 /**
  * ---------------------------------
- * Blockchain Provider Configuration
+ * Ethereum Provider Utilities
  * ---------------------------------
- * Singleton Ethereum provider for blockchain interactions
+ * Singleton providers for Ethereum JSON-RPC and Etherscan API interactions
  */
-import { ethers, EtherscanProvider } from 'ethers';
 
-import logger from '../../../config/logger';
+import { ethers } from 'ethers';
 import appConfig from '../../../config/app.config';
+import logger from '../../../config/logger';
 
 let provider: ethers.JsonRpcProvider | null = null;
-let etherscanProvider: EtherscanProvider | null = null;
+let etherscanProvider: ethers.EtherscanProvider | null = null;
 
 /**
  * Get or create Ethereum provider singleton
@@ -39,9 +39,9 @@ export function getEthereumProvider(): ethers.JsonRpcProvider {
  * Get or create Etherscan provider singleton for efficient transaction fetching
  * @returns Etherscan provider instance
  */
-export function getEtherscanProvider(): EtherscanProvider {
+export function getEtherscanProvider(): ethers.EtherscanProvider {
   if (!etherscanProvider) {
-    etherscanProvider = new EtherscanProvider(
+    etherscanProvider = new ethers.EtherscanProvider(
       {
         name: 'sepolia',
         chainId: 11155111,

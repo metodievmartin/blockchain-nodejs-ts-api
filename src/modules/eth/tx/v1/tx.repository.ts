@@ -3,8 +3,9 @@
  * ---------------------------------
  * Database operations for blockchain transactions and coverage tracking
  */
-import { getOrCreateDB } from '../../../config/db';
-import logger from '../../../config/logger';
+import { getOrCreateDB } from '../../../../config/db';
+import { mapEtherscanTransactionToDB } from '../../shared/transaction-mapper';
+import logger from '../../../../config/logger';
 
 const prisma = getOrCreateDB();
 

@@ -46,6 +46,23 @@ const EnvSchema = z.object({
   JWT_SECRET: z
     .string('Invalid or missing secret')
     .min(32, 'The secret must be at least 32 characters long'),
+  
+  // Blockchain configuration
+  SEPOLIA_RPC_URL: z.url(),
+  ETHERSCAN_API_KEY: z.string().optional(),
+  
+  // Performance tuning
+  BLOCKCHAIN_BATCH_SIZE: z.coerce.number().default(1000),
+  BLOCKCHAIN_SYNC_THRESHOLD: z.coerce.number().default(2000),
+  BLOCKCHAIN_MAX_CONCURRENT: z.coerce.number().default(3),
+  
+  // Caching
+  BALANCE_CACHE_TTL: z.coerce.number().default(30),
+  TX_QUERY_CACHE_TTL: z.coerce.number().default(300),
+  
+  // RPC settings
+  RPC_TIMEOUT: z.coerce.number().default(10000),
+  RPC_RETRY_ATTEMPTS: z.coerce.number().default(3),
 });
 
 const parsed = EnvSchema.safeParse(process.env);

@@ -41,6 +41,24 @@ const appConfig = {
   security: {
     saltRounds: env.SALT_ROUNDS,
   },
+  
+  blockchain: {
+    rpcUrl: env.SEPOLIA_RPC_URL,
+    etherscanApiKey: env.ETHERSCAN_API_KEY,
+    
+    // Performance tuning
+    batchSize: env.BLOCKCHAIN_BATCH_SIZE,
+    syncThreshold: env.BLOCKCHAIN_SYNC_THRESHOLD,
+    maxConcurrent: env.BLOCKCHAIN_MAX_CONCURRENT,
+    
+    // Caching
+    balanceCacheTtl: env.BALANCE_CACHE_TTL,
+    txQueryCacheTtl: env.TX_QUERY_CACHE_TTL,
+    
+    // RPC settings
+    rpcTimeout: env.RPC_TIMEOUT,
+    rpcRetryAttempts: env.RPC_RETRY_ATTEMPTS,
+  },
 } as const;
 
 export default appConfig;

@@ -45,3 +45,46 @@ model RefreshToken {
   @@index([userId])
   @@map("refresh_tokens") // table name "refresh_tokens" 
 }
+
+/**
+ * ------------------------------------------------
+ * Transaction model - Blockchain transactions
+ * ------------------------------------------------
+ */
+model Transaction {
+  hash            String   @id @db.VarChar(66) // Ethereum transaction hash (0x + 64 chars)
+  address         String   @db.VarChar(42) // Ethereum address (0x + 40 chars)
+  blockNumber     BigInt   @map("block_number") // Changed to BigInt for large block numbers
+  from            String   @db.VarChar(42)
+  to              String?  @db.VarChar(42)
+  value           Decimal  @db.Decimal(78, 0) // Wei amount (up to 78 digits)
+  gasPrice        Decimal  @map("gas_price") @db.Decimal(78, 0)
+  gasUsed         BigInt?  @map("gas_used")
+  gas             BigInt?  // Gas limit
+  functionName    String?  @map("function_name") @db.VarChar(255) // Function signature/name
+  txreceiptStatus String?  @map("txreceipt_status") @db.VarChar(10) // Transaction status (1 = success, 0 = failed)
+  contractAddress String?  @map("contract_address") @db.VarChar(42) // Contract address for contract creation
+  timestamp       DateTime
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([address, blockNumber], name: "idx_address_block")
+  @@index([address, timestamp], name: "idx_address_timestamp")
+  @@map("transactions")
+}
+
+/**
+ * ------------------------------------------------
+ * Coverage model - Track indexed block ranges
+ * ------------------------------------------------
+ */
+model Coverage {
+  id        Int      @id @default(autoincrement())
+  address   String   @db.VarChar(42)
+  fromBlock Int      @map("from_block")
+  toBlock   Int      @map("to_block")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([address, fromBlock, toBlock], name: "idx_coverage_range")
+  @@unique([address, fromBlock, toBlock], name: "uniq_coverage")
+  @@map("coverage")
+}

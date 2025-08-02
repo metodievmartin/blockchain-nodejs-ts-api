@@ -24,10 +24,7 @@ import {
   getCachedPaginatedTransactionQuery,
   setCachedPaginatedTransactionQuery,
 } from '../../shared/cache.service';
-import {
-  processGapsInBackground,
-  processGapInBatches,
-} from '../../shared/background-processor';
+import { processGapsInBackground } from '../../shared/background-processor';
 import {
   findGaps,
   getExistingTransactions,
@@ -189,7 +186,6 @@ export async function getTransactions(
       page: page,
       sort: order,
     };
-
     const etherscanTxs = await etherscanProvider.fetch('account', params);
     const transactions = etherscanTxs || [];
     const hasMore = transactions.length === limit;

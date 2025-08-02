@@ -4,7 +4,7 @@
  * Singleton Redis client for session invalidation and caching
  */
 import { createClient, RedisClientType } from 'redis';
-
+import Redis from 'ioredis';
 import appConfig from './app.config';
 
 let redisClient: RedisClientType | null = null;
@@ -19,7 +19,6 @@ export function getOrCreateRedisClient(): RedisClientType {
       url: appConfig.redis.url,
     });
 
-    // Handle connection events
     redisClient.on('error', (err) => {
       console.error('Redis Client Error:', err);
     });
@@ -38,6 +37,17 @@ export function getOrCreateRedisClient(): RedisClientType {
   }
 
   return redisClient;
+}
+
+/**
+ * Creates an ioredis client instance for BullMQ
+ * @returns ioredis client instance
+ */
+export function createIORedisClient(): Redis {
+  return new Redis(appConfig.redis.url, {
+    maxRetriesPerRequest: null,
+    lazyConnect: true,
+  });
 }
 
 /**

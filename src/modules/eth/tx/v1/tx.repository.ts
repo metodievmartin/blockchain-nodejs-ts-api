@@ -4,40 +4,41 @@
  * Database operations for blockchain transactions and coverage tracking
  */
 import { getOrCreateDB } from '../../../../config/db';
-import { mapEtherscanTransactionToDB } from '../../shared/transaction-mapper';
 import logger from '../../../../config/logger';
 
 const prisma = getOrCreateDB();
 
 /**
  * Find gaps in coverage for a given address and block range
- * @param address - Ethereum address (normalized)
+ * @param address - Ethereum address (normalised)
  * @param requestedFrom - Starting block number
  * @param requestedTo - Ending block number
  * @returns Array of gaps that need to be filled
  */
 export async function findGaps(
-  address: string, 
-  requestedFrom: number, 
+  address: string,
+  requestedFrom: number,
   requestedTo: number
 ): Promise<Gap[]> {
   try {
+    const normalizedAddress = address.toLowerCase();
+
     // Get all coverage ranges that overlap with requested range
     const coverageRanges = await prisma.coverage.findMany({
       where: {
-        address: address.toLowerCase(),
+        address: normalizedAddress,
         toBlock: { gte: requestedFrom },
-        fromBlock: { lte: requestedTo }
+        fromBlock: { lte: requestedTo },
       },
       orderBy: { fromBlock: 'asc' },
-      select: { fromBlock: true, toBlock: true }
+      select: { fromBlock: true, toBlock: true },
     });
 
     logger.debug('Found coverage ranges', {
-      address,
+      address: normalizedAddress,
       requestedFrom,
       requestedTo,
-      coverageCount: coverageRanges.length
+      coverageCount: coverageRanges.length,
     });
 
     const gaps: Gap[] = [];
@@ -48,10 +49,10 @@ export async function findGaps(
       if (cursor < range.fromBlock) {
         gaps.push({
           fromBlock: cursor,
-          toBlock: range.fromBlock - 1
+          toBlock: range.fromBlock - 1,
         });
       }
-      
+
       // Move cursor past this range
       cursor = Math.max(cursor, range.toBlock + 1);
     }
@@ -60,16 +61,19 @@ export async function findGaps(
     if (cursor <= requestedTo) {
       gaps.push({
         fromBlock: cursor,
-        toBlock: requestedTo
+        toBlock: requestedTo,
       });
     }
 
     logger.debug('Calculated gaps', {
-      address,
+      address: normalizedAddress,
       requestedFrom,
       requestedTo,
       gaps: gaps.length,
-      totalMissingBlocks: gaps.reduce((sum, gap) => sum + (gap.toBlock - gap.fromBlock + 1), 0)
+      totalMissingBlocks: gaps.reduce(
+        (sum, gap) => sum + (gap.toBlock - gap.fromBlock + 1),
+        0
+      ),
     });
 
     return gaps;
@@ -78,7 +82,7 @@ export async function findGaps(
       address,
       requestedFrom,
       requestedTo,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
     });
     throw error;
   }
@@ -98,7 +102,7 @@ export async function getExistingTransactions(
 ) {
   try {
     const where: any = {
-      address: address.toLowerCase()
+      address: address.toLowerCase(),
     };
 
     if (fromBlock !== undefined || toBlock !== undefined) {
@@ -109,14 +113,14 @@ export async function getExistingTransactions(
 
     const transactions = await prisma.transaction.findMany({
       where,
-      orderBy: { blockNumber: 'asc' }
+      orderBy: { blockNumber: 'asc' },
     });
 
     logger.debug('Retrieved existing transactions', {
       address,
       fromBlock,
       toBlock,
-      count: transactions.length
+      count: transactions.length,
     });
 
     return transactions;
@@ -125,7 +129,7 @@ export async function getExistingTransactions(
       address,
       fromBlock,
       toBlock,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
     });
     throw error;
   }
@@ -151,7 +155,7 @@ export async function getExistingTransactionsPaginated(
 ): Promise<any[]> {
   const db = getOrCreateDB();
   const skip = (page - 1) * limit;
-  
+
   try {
     const transactions = await db.transaction.findMany({
       where: {
@@ -197,7 +201,7 @@ export async function getExistingTransactionsPaginated(
  * Save a batch of transactions and coverage in a database transaction
  * @param address - Ethereum address
  * @param fromBlock - Starting block number
- * @param toBlock - Ending block number  
+ * @param toBlock - Ending block number
  * @param transactions - Array of transactions to save
  */
 export async function saveTransactionBatch(
@@ -207,7 +211,8 @@ export async function saveTransactionBatch(
   transactions: any[]
 ): Promise<void> {
   const db = getOrCreateDB();
-  
+  const normalizedAddress = address.toLowerCase(); // Normalize address for consistency
+
   try {
     await db.$transaction(async (prisma) => {
       // Save transactions if any
@@ -216,20 +221,20 @@ export async function saveTransactionBatch(
           data: transactions,
           skipDuplicates: true, // Skip if transaction already exists
         });
-        
+
         logger.debug('Saved transaction batch', {
-          address,
+          address: normalizedAddress,
           fromBlock,
           toBlock,
           count: transactions.length,
         });
       }
-      
+
       // Save or update coverage
       await prisma.coverage.upsert({
         where: {
           uniq_coverage: {
-            address,
+            address: normalizedAddress, // Use normalized address
             fromBlock,
             toBlock,
           },
@@ -238,28 +243,28 @@ export async function saveTransactionBatch(
           // Coverage already exists, no need to update anything
         },
         create: {
-          address,
+          address: normalizedAddress, // Use normalized address
           fromBlock,
           toBlock,
         },
       });
-      
+
       logger.debug('Saved coverage range', {
-        address,
+        address: normalizedAddress,
         fromBlock,
         toBlock,
       });
     });
-    
+
     logger.info('Transaction batch saved successfully', {
-      address,
+      address: normalizedAddress,
       fromBlock,
       toBlock,
       transactionCount: transactions.length,
     });
   } catch (error) {
     logger.error('Failed to save transaction batch', {
-      address,
+      address: normalizedAddress,
       fromBlock,
       toBlock,
       transactionCount: transactions.length,
@@ -278,8 +283,8 @@ export async function getTransactionCount(address: string): Promise<number> {
   try {
     const count = await prisma.transaction.count({
       where: {
-        address: address.toLowerCase()
-      }
+        address: address.toLowerCase(),
+      },
     });
 
     logger.debug('Retrieved transaction count', { address, count });
@@ -287,7 +292,7 @@ export async function getTransactionCount(address: string): Promise<number> {
   } catch (error) {
     logger.error('Error getting transaction count', {
       address,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
     });
     throw error;
   }
@@ -302,26 +307,26 @@ export async function getCoverageRanges(address: string) {
   try {
     const coverage = await prisma.coverage.findMany({
       where: {
-        address: address.toLowerCase()
+        address: address.toLowerCase(),
       },
       orderBy: { fromBlock: 'asc' },
       select: {
         fromBlock: true,
         toBlock: true,
-        createdAt: true
-      }
+        createdAt: true,
+      },
     });
 
     logger.debug('Retrieved coverage ranges', {
       address,
-      rangeCount: coverage.length
+      rangeCount: coverage.length,
     });
 
     return coverage;
   } catch (error) {
     logger.error('Error getting coverage ranges', {
       address,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
     });
     throw error;
   }
@@ -335,11 +340,11 @@ export async function deleteAddressData(address: string): Promise<void> {
   try {
     await prisma.$transaction(async (tx) => {
       await tx.transaction.deleteMany({
-        where: { address: address.toLowerCase() }
+        where: { address: address.toLowerCase() },
       });
-      
+
       await tx.coverage.deleteMany({
-        where: { address: address.toLowerCase() }
+        where: { address: address.toLowerCase() },
       });
     });
 
@@ -347,7 +352,7 @@ export async function deleteAddressData(address: string): Promise<void> {
   } catch (error) {
     logger.error('Error deleting address data', {
       address,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
     });
     throw error;
   }

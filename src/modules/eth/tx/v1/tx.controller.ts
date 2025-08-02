@@ -14,6 +14,7 @@ import {
   GetCoverageResponse,
 } from './tx.dto';
 import logger from '../../../../config/logger';
+import { getQueueStats } from '../../shared/queue.service';
 
 /**
  * Get transactions for an address
@@ -125,3 +126,10 @@ export const getStoredTransactionCount = catchAsync(
     });
   }
 );
+
+export const getQueueInfo = catchAsync(async (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    data: await getQueueStats(),
+  });
+});

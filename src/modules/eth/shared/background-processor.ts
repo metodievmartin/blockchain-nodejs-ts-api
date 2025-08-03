@@ -1,66 +1,48 @@
 /**
+ * Background Processor
  * ---------------------------------
- * Background Transaction Processor
- * ---------------------------------
- * Handles background processing of large transaction gaps using BullMQ queue system
+ * Handles background processing of blockchain transaction gaps using BullMQ
  */
 
-import {
-  queueGapsForProcessing,
-  startGapProcessingWorker,
-} from './queue.service';
+import { queueGapsForProcessing } from '../../../queue/client';
+import { Gap } from '../../../queue/types';
 import logger from '../../../config/logger';
 
-// Initialize worker on module load
-let workerInitialized = false;
-
 /**
- * Initialize the gap processing worker if not already started
- */
-function ensureWorkerStarted(): void {
-  if (!workerInitialized) {
-    startGapProcessingWorker();
-    workerInitialized = true;
-  }
-}
-
-/**
- * Process gaps in background using BullMQ queue system
- * Gaps are automatically batched into manageable jobs and processed by workers
+ * Process gaps in the background using BullMQ
  * @param address - Ethereum address
- * @param gaps - Array of gap objects with fromBlock and toBlock
+ * @param gaps - Array of gaps to process
  */
-export function processGapsInBackground(
+export async function processGapsInBackground(
   address: string,
-  gaps: Array<{ fromBlock: number; toBlock: number }>
-): void {
-  // Ensure worker is running
-  // ensureWorkerStarted();
+  gaps: Gap[]
+): Promise<void> {
+  if (gaps.length === 0) {
+    logger.debug('No gaps to process', { address });
+    return;
+  }
 
-  // Queue gaps for processing (fire-and-forget)
-  setImmediate(async () => {
-    try {
-      logger.info('Queueing gaps for background processing', {
-        address,
-        gaps: gaps.length,
-        totalBlocks: gaps.reduce(
-          (sum, gap) => sum + (gap.toBlock - gap.fromBlock + 1),
-          0
-        ),
-      });
-
-      await queueGapsForProcessing(address, gaps);
-
-      logger.info('All gaps queued successfully', {
-        address,
-        gaps: gaps.length,
-      });
-    } catch (error) {
-      logger.error('Failed to queue gaps for processing', {
-        address,
-        gaps: gaps.length,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+  logger.info('Queuing gaps for background processing', {
+    address,
+    gapsCount: gaps.length,
+    totalBlocks: gaps.reduce(
+      (sum, gap) => sum + (gap.toBlock - gap.fromBlock + 1),
+      0
+    ),
   });
+
+  try {
+    await queueGapsForProcessing(address, gaps);
+    logger.info('Successfully queued gaps for processing', {
+      address,
+      gapsCount: gaps.length,
+    });
+  } catch (error) {
+    logger.error('Failed to queue gaps for processing', {
+      address,
+      gapsCount: gaps.length,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }

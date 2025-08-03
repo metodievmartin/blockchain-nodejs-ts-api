@@ -4,17 +4,19 @@
  * HTTP request handlers for blockchain endpoints
  */
 import { Request, Response } from 'express';
+import { z } from 'zod';
 import { catchAsync } from '../../../../utils/catch-async';
+import { ApiError } from '../../../../utils/api.error';
 import * as txService from './tx.service';
 import {
   AddressParamsSchema,
-  GetTransactionsQuerySchema,
-  GetTransactionsResponse,
   BalanceResponse,
   GetCoverageResponse,
+  GetTransactionsQuerySchema,
+  GetTransactionsResponse,
 } from './tx.dto';
 import logger from '../../../../config/logger';
-import { getQueueStats } from '../../shared/queue.service';
+import { getQueueStats } from '../../../../queue/client';
 
 /**
  * Get transactions for an address
@@ -23,10 +25,26 @@ import { getQueueStats } from '../../shared/queue.service';
 export const getTransactions = catchAsync(
   async (req: Request, res: Response) => {
     // Validate path parameters
-    const { address } = AddressParamsSchema.parse(req.params);
+    const addressResult = AddressParamsSchema.safeParse(req.params);
+    if (!addressResult.success) {
+      throw ApiError.badRequest(
+        'Invalid address parameters',
+        z.flattenError(addressResult.error)
+      );
+    }
+
+    const { address } = addressResult.data;
 
     // Validate query parameters
-    const query = GetTransactionsQuerySchema.parse(req.query);
+    const queryResult = GetTransactionsQuerySchema.safeParse(req.query);
+    if (!queryResult.success) {
+      throw ApiError.badRequest(
+        'Invalid query parameters',
+        z.flattenError(queryResult.error)
+      );
+    }
+
+    const query = queryResult.data;
 
     logger.info('Paginated transaction request received', {
       address,
@@ -61,7 +79,14 @@ export const getTransactions = catchAsync(
  * GET /api/v1/eth/address/:address/balance
  */
 export const getBalance = catchAsync(async (req: Request, res: Response) => {
-  const { address } = AddressParamsSchema.parse(req.params);
+  const addressResult = AddressParamsSchema.safeParse(req.params);
+  if (!addressResult.success) {
+    throw ApiError.badRequest(
+      'Invalid address parameters',
+      z.flattenError(addressResult.error)
+    );
+  }
+  const { address } = addressResult.data;
 
   logger.info('Balance request received', {
     address,
@@ -85,7 +110,14 @@ export const getBalance = catchAsync(async (req: Request, res: Response) => {
  */
 export const getAddressCoverage = catchAsync(
   async (req: Request, res: Response) => {
-    const { address } = AddressParamsSchema.parse(req.params);
+    const addressResult = AddressParamsSchema.safeParse(req.params);
+    if (!addressResult.success) {
+      throw ApiError.badRequest(
+        'Invalid address parameters',
+        z.flattenError(addressResult.error)
+      );
+    }
+    const { address } = addressResult.data;
 
     logger.info('Coverage request received', {
       address,
@@ -110,7 +142,14 @@ export const getAddressCoverage = catchAsync(
  */
 export const getStoredTransactionCount = catchAsync(
   async (req: Request, res: Response) => {
-    const { address } = AddressParamsSchema.parse(req.params);
+    const addressResult = AddressParamsSchema.safeParse(req.params);
+    if (!addressResult.success) {
+      throw ApiError.badRequest(
+        'Invalid address parameters',
+        z.flattenError(addressResult.error)
+      );
+    }
+    const { address } = addressResult.data;
 
     logger.info('Transaction count request received', {
       address,
@@ -122,7 +161,7 @@ export const getStoredTransactionCount = catchAsync(
 
     res.json({
       success: true,
-      data: { count },
+      count,
     });
   }
 );

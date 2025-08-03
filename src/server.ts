@@ -7,10 +7,6 @@ import logger from './config/logger';
 import appConfig from './config/app.config';
 import { connectDB, disconnectDB } from './config/db';
 import { connectRedis, disconnectRedis } from './config/redis';
-import {
-  startGapProcessingWorker,
-  stopGapProcessingWorker,
-} from './modules/eth/shared/queue.service';
 
 const httpServer = createServer(app);
 
@@ -27,15 +23,11 @@ async function shutdown(reason: string, err?: unknown) {
     await new Promise<void>((resolve) => httpServer!.close(() => resolve()));
     logger.info('HTTP server closed');
 
-    // 2. Stop BullMQ workers
-    await stopGapProcessingWorker();
-    logger.info('BullMQ workers stopped');
-
-    // 3. Disconnect from Redis
+    // 2. Disconnect from Redis
     await disconnectRedis();
     logger.info('Redis connection closed');
 
-    // 4. Disconnect from the database
+    // 3. Disconnect from the database
     await disconnectDB();
     logger.info('Database connection closed');
 
@@ -51,10 +43,6 @@ async function main(): Promise<void> {
   try {
     await connectDB();
     await connectRedis();
-
-    // Initialize BullMQ workers
-    startGapProcessingWorker();
-    logger.info('BullMQ gap processing worker started');
 
     httpServer.listen(appConfig.server.port, () => {
       logger.info(

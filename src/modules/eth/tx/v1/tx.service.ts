@@ -13,28 +13,25 @@ import {
   validateBlockRange,
 } from '../../shared/address-validator';
 import {
-  mapEthersTransactionToDB,
   mapDBTransactionToAPI,
-  mapEtherscanTransactionToDB,
   mapEtherscanTransactionToAPI,
+  mapEtherscanTransactionToDB,
 } from '../../shared/transaction-mapper';
 import {
   getCachedBalance,
-  setCachedBalance,
   getCachedPaginatedTransactionQuery,
+  setCachedBalance,
   setCachedPaginatedTransactionQuery,
 } from '../../shared/cache.service';
 import { processGapsInBackground } from '../../shared/background-processor';
 import {
   findGaps,
-  getExistingTransactions,
-  getExistingTransactionsPaginated,
-  saveTransactionBatch,
-  getTransactionCount,
   getCoverageRanges,
+  getExistingTransactionsPaginated,
+  getTransactionCount,
+  saveTransactionBatch,
 } from './tx.repository';
-import { ProcessingResult, TransactionResponse, CoverageRange } from './tx.dto';
-import appConfig from '../../../../config/app.config';
+import { CoverageRange } from './tx.dto';
 import logger from '../../../../config/logger';
 
 /**
@@ -221,7 +218,7 @@ export async function getTransactions(
     );
 
     // Start background processing to fill database
-    processGapsInBackground(normalizedAddress, gaps);
+    await processGapsInBackground(normalizedAddress, gaps);
 
     logger.info('Returned Etherscan result, background processing started', {
       address: normalizedAddress,
@@ -267,6 +264,138 @@ export async function getTransactions(
         backgroundProcessing: true,
       },
     };
+  }
+}
+
+/**
+ * Process a transaction gap (business logic for workers)
+ * This function is exported for use by background workers
+ * @param address - Ethereum address
+ * @param fromBlock - Starting block number
+ * @param toBlock - Ending block number
+ * @param maxTransactionsPerBatch - Maximum transactions per API call
+ * @param progressCallback - Optional progress callback function
+ * @returns Processing result with transaction count and pages
+ */
+export async function processTransactionGap(
+  address: string,
+  fromBlock: number,
+  toBlock: number,
+  maxTransactionsPerBatch: number = 5000,
+  progressCallback?: (progress: any) => Promise<void>
+): Promise<{ transactionCount: number; pages: number }> {
+  const startTime = Date.now();
+  const normalizedAddress = validateAndNormalizeAddress(address);
+  const etherscanProvider = getEtherscanProvider();
+
+  logger.info('Processing transaction gap', {
+    address: normalizedAddress,
+    fromBlock,
+    toBlock,
+    blocks: toBlock - fromBlock + 1,
+  });
+
+  try {
+    const allTransactions: any[] = [];
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore) {
+      // Update progress if callback provided
+      if (progressCallback) {
+        await progressCallback({
+          phase: 'fetching',
+          page,
+          totalPages: '?',
+        });
+      }
+
+      const params = {
+        action: 'txlist',
+        address: normalizedAddress,
+        startblock: fromBlock,
+        endblock: toBlock,
+        offset: maxTransactionsPerBatch,
+        page: page,
+        sort: 'asc',
+      };
+
+      logger.debug('Fetching transactions from Etherscan', {
+        address: normalizedAddress,
+        fromBlock,
+        toBlock,
+        page,
+        offset: maxTransactionsPerBatch,
+      });
+
+      const etherscanTxs = await etherscanProvider.fetch('account', params);
+      const transactions = etherscanTxs || [];
+
+      if (transactions.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      // Filter transactions to ensure they're within our block range
+      const filteredTransactions = transactions.filter(
+        (tx: any) =>
+          parseInt(tx.blockNumber) >= fromBlock &&
+          parseInt(tx.blockNumber) <= toBlock
+      );
+
+      allTransactions.push(...filteredTransactions);
+
+      // Check if we got fewer transactions than requested (last page)
+      if (transactions.length < maxTransactionsPerBatch) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    }
+
+    // Update progress for saving phase
+    if (progressCallback) {
+      await progressCallback({
+        phase: 'saving',
+        transactions: allTransactions.length,
+      });
+    }
+
+    // Map transactions to database format
+    const mappedTransactions = allTransactions.map((tx) =>
+      mapEtherscanTransactionToDB(tx, normalizedAddress)
+    );
+
+    // Save transactions and coverage to database
+    await saveTransactionBatch(
+      normalizedAddress,
+      fromBlock,
+      toBlock,
+      mappedTransactions
+    );
+
+    const processingTime = Date.now() - startTime;
+    logger.info('Transaction gap processing completed', {
+      address: normalizedAddress,
+      fromBlock,
+      toBlock,
+      transactionCount: mappedTransactions.length,
+      pages: page,
+      processingTime,
+    });
+
+    return {
+      transactionCount: mappedTransactions.length,
+      pages: page,
+    };
+  } catch (error) {
+    logger.error('Error processing transaction gap', {
+      address: normalizedAddress,
+      fromBlock,
+      toBlock,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   }
 }
 

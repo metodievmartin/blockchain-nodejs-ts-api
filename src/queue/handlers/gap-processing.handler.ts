@@ -70,9 +70,32 @@ export async function handleGapProcessingJob(
       fromBlock,
       toBlock,
       transactionCount: result.transactionCount,
-      pages: result.pages,
+      iterations: result.pages,
+      processedRange: `${result.processedFromBlock}-${result.processedToBlock}`,
+      partialRange: result.partialRange,
       progress: `${currentJob}/${totalJobs}`,
     });
+
+    // If we only processed a partial range due to Etherscan's 10k limit,
+    // we should log this for potential follow-up processing
+    if (result.partialRange) {
+      const remainingFromBlock = result.processedToBlock + 1;
+      const remainingToBlock = toBlock;
+      
+      logger.warn('Partial range processed due to Etherscan limit', {
+        jobId: job.id,
+        address,
+        originalRange: `${fromBlock}-${toBlock}`,
+        processedRange: `${result.processedFromBlock}-${result.processedToBlock}`,
+        remainingRange: `${remainingFromBlock}-${remainingToBlock}`,
+        transactionCount: result.transactionCount,
+        note: 'Remaining range may need separate processing',
+      });
+      
+      // TODO: Consider auto-queuing the remaining range as a new job
+      // This would require access to the queue client and careful handling
+      // to avoid infinite loops in case of addresses with massive transaction counts
+    }
   } catch (error) {
     logger.error('Gap job processing failed', {
       jobId: job.id,

@@ -283,7 +283,13 @@ export async function processTransactionGap(
   toBlock: number,
   maxTransactionsPerBatch: number = 5000,
   progressCallback?: (progress: any) => Promise<void>
-): Promise<{ transactionCount: number; pages: number }> {
+): Promise<{
+  transactionCount: number;
+  pages: number;
+  processedFromBlock: number;
+  processedToBlock: number;
+  partialRange: boolean;
+}> {
   const startTime = Date.now();
   const normalizedAddress = validateAndNormalizeAddress(address);
   const etherscanProvider = getEtherscanProvider();
@@ -297,34 +303,40 @@ export async function processTransactionGap(
 
   try {
     const allTransactions: any[] = [];
-    let page = 1;
-    let hasMore = true;
+    let currentStartBlock = fromBlock;
+    let currentEndBlock = toBlock;
+    let iterationCount = 0;
+    let actualEndBlock = fromBlock - 1; // Track the actual end block we've fully processed
 
-    while (hasMore) {
+    while (currentStartBlock <= toBlock) {
+      iterationCount++;
+      
       // Update progress if callback provided
       if (progressCallback) {
         await progressCallback({
           phase: 'fetching',
-          page,
+          page: iterationCount,
           totalPages: '?',
+          currentBlock: currentStartBlock,
+          targetBlock: toBlock,
         });
       }
 
       const params = {
         action: 'txlist',
         address: normalizedAddress,
-        startblock: fromBlock,
-        endblock: toBlock,
+        startblock: currentStartBlock,
+        endblock: currentEndBlock,
+        page: 1, // Always use page 1 with block-based pagination
         offset: maxTransactionsPerBatch,
-        page: page,
         sort: 'asc',
       };
 
-      logger.debug('Fetching transactions from Etherscan', {
+      logger.debug('Fetching transactions from Etherscan (block-based)', {
         address: normalizedAddress,
-        fromBlock,
-        toBlock,
-        page,
+        startBlock: currentStartBlock,
+        endBlock: currentEndBlock,
+        iteration: iterationCount,
         offset: maxTransactionsPerBatch,
       });
 
@@ -332,24 +344,57 @@ export async function processTransactionGap(
       const transactions = etherscanTxs || [];
 
       if (transactions.length === 0) {
-        hasMore = false;
+        // No more transactions in this range
+        actualEndBlock = currentEndBlock;
         break;
       }
 
       // Filter transactions to ensure they're within our block range
       const filteredTransactions = transactions.filter(
         (tx: any) =>
-          parseInt(tx.blockNumber) >= fromBlock &&
-          parseInt(tx.blockNumber) <= toBlock
+          parseInt(tx.blockNumber) >= currentStartBlock &&
+          parseInt(tx.blockNumber) <= currentEndBlock
       );
 
       allTransactions.push(...filteredTransactions);
 
-      // Check if we got fewer transactions than requested (last page)
-      if (transactions.length < maxTransactionsPerBatch) {
-        hasMore = false;
+      // Check if we got the maximum number of transactions (hit the limit)
+      if (transactions.length === maxTransactionsPerBatch) {
+        // We likely hit the limit, need to continue from the last transaction's block
+        const lastTransaction = transactions[transactions.length - 1];
+        const lastBlockNumber = parseInt(lastTransaction.blockNumber);
+        
+        // Set actualEndBlock to the last fully processed block
+        // We subtract 1 because there might be more transactions in lastBlockNumber
+        actualEndBlock = Math.max(actualEndBlock, lastBlockNumber - 1);
+        
+        // Continue from the last block number - 1 (as per Etherscan docs)
+        currentStartBlock = lastBlockNumber - 1;
+        
+        logger.info('Hit transaction limit, continuing from block', {
+          address: normalizedAddress,
+          lastBlockNumber,
+          nextStartBlock: currentStartBlock,
+          transactionsFetched: allTransactions.length,
+          iteration: iterationCount,
+        });
       } else {
-        page++;
+        // We got fewer transactions than the limit, so we've processed the full range
+        actualEndBlock = currentEndBlock;
+        break;
+      }
+
+      // Safety check to prevent infinite loops
+      if (iterationCount > 100) {
+        logger.warn('Too many iterations in block-based pagination, stopping', {
+          address: normalizedAddress,
+          fromBlock,
+          toBlock,
+          currentStartBlock,
+          iterations: iterationCount,
+          transactionsFetched: allTransactions.length,
+        });
+        break;
       }
     }
 
@@ -358,6 +403,8 @@ export async function processTransactionGap(
       await progressCallback({
         phase: 'saving',
         transactions: allTransactions.length,
+        blocksProcessed: actualEndBlock - fromBlock + 1,
+        totalBlocks: toBlock - fromBlock + 1,
       });
     }
 
@@ -367,26 +414,34 @@ export async function processTransactionGap(
     );
 
     // Save transactions and coverage to database
+    // Important: Save coverage for the actual range we processed, not the requested range
+    const coverageFromBlock = fromBlock;
+    const coverageToBlock = actualEndBlock;
+    
     await saveTransactionBatch(
       normalizedAddress,
-      fromBlock,
-      toBlock,
+      coverageFromBlock,
+      coverageToBlock,
       mappedTransactions
     );
 
     const processingTime = Date.now() - startTime;
     logger.info('Transaction gap processing completed', {
       address: normalizedAddress,
-      fromBlock,
-      toBlock,
+      requestedRange: `${fromBlock}-${toBlock}`,
+      processedRange: `${coverageFromBlock}-${coverageToBlock}`,
       transactionCount: mappedTransactions.length,
-      pages: page,
+      iterations: iterationCount,
       processingTime,
+      partialRange: actualEndBlock < toBlock,
     });
 
     return {
       transactionCount: mappedTransactions.length,
-      pages: page,
+      pages: iterationCount,
+      processedFromBlock: coverageFromBlock,
+      processedToBlock: coverageToBlock,
+      partialRange: actualEndBlock < toBlock,
     };
   } catch (error) {
     logger.error('Error processing transaction gap', {

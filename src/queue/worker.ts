@@ -94,7 +94,7 @@ async function gracefulShutdown(signal: string): Promise<void> {
 
   try {
     if (worker) {
-      logger.info('Closing worker...');
+      logger.info('Closing worker... Finalising running jobs...');
       await worker.close();
       logger.info('Worker closed successfully');
     }

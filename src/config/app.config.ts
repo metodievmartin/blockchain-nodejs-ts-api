@@ -59,6 +59,10 @@ const appConfig = {
     rpcTimeout: env.RPC_TIMEOUT,
     rpcRetryAttempts: env.RPC_RETRY_ATTEMPTS,
   },
+  
+  logging: {
+    level: env.LOG_LEVEL,
+  },
 } as const;
 
 export default appConfig;

@@ -63,6 +63,11 @@ const EnvSchema = z.object({
   // RPC settings
   RPC_TIMEOUT: z.coerce.number().default(10000),
   RPC_RETRY_ATTEMPTS: z.coerce.number().default(3),
+  
+  // Logging
+  LOG_LEVEL: z
+    .enum(['error', 'warn', 'info', 'debug', 'verbose'])
+    .default('info'), // Default to 'info' to disable debug logs
 });
 
 const parsed = EnvSchema.safeParse(process.env);

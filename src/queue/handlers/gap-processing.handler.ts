@@ -9,9 +9,11 @@ import Bottleneck from 'bottleneck';
 import { GapProcessingJobData, JobProgress } from '../types';
 
 import { JOB_CONFIG } from '../config';
-import logger from '../../config/logger';
+import { createLogger } from '../../config/logger';
 import { queueGapsForProcessing } from '../client';
 import { processTransactionGap } from '../../modules/eth/tx/v1/tx.service';
+
+const logger = createLogger('queue');
 
 // Etherscan API rate limiter: 5 requests per second
 const etherscanLimiter = new Bottleneck({

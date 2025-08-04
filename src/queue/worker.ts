@@ -4,12 +4,16 @@
  * BullMQ worker for processing background jobs
  */
 
-import '../config/env';
 import { Worker } from 'bullmq';
-import logger from '../config/logger';
+
 import { GapProcessingJobData } from './types';
+
+import '../config/env';
+import { createLogger } from '../config/logger';
 import { QUEUE_NAMES, getDefaultWorkerOptions } from './config';
 import { handleGapProcessingJob } from './handlers/gap-processing.handler';
+
+const logger = createLogger('queue');
 
 let worker: Worker<GapProcessingJobData> | null = null;
 let isShuttingDown = false;

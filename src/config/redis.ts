@@ -3,8 +3,10 @@
  * ---------------------------------
  * Singleton Redis client for session invalidation and caching
  */
-import { createClient, RedisClientType } from 'redis';
 import Redis from 'ioredis';
+import { createClient, RedisClientType } from 'redis';
+
+import logger from './logger';
 import appConfig from './app.config';
 
 let redisClient: RedisClientType | null = null;
@@ -20,19 +22,19 @@ export function getOrCreateRedisClient(): RedisClientType {
     });
 
     redisClient.on('error', (err) => {
-      console.error('Redis Client Error:', err);
+      logger.error('Redis Client Error:', err);
     });
 
     redisClient.on('connect', () => {
-      console.log('Redis Client connected');
+      logger.info('Redis Client connected');
     });
 
     redisClient.on('ready', () => {
-      console.log('Redis Client ready');
+      logger.info('Redis Client ready');
     });
 
     redisClient.on('end', () => {
-      console.log('Redis Client Disconnected');
+      logger.info('Redis Client Disconnected');
     });
   }
 

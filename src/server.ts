@@ -45,9 +45,7 @@ async function main(): Promise<void> {
     await connectRedis();
 
     httpServer.listen(appConfig.server.port, () => {
-      logger.info(
-        `HTTP server listening on port: ${appConfig.server.port} (${appConfig.nodeEnv})...`
-      );
+      logger.info(`HTTP server listening on port: ${appConfig.server.port}`);
     });
 
     process.on('SIGINT', () => shutdown('SIGINT received'));

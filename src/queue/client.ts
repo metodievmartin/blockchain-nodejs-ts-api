@@ -4,10 +4,12 @@
  * Queue operations and job management
  */
 
-import logger from '../config/logger';
 import { BulkJobOptions, Queue } from 'bullmq';
+import { createLogger } from '../config/logger';
 import { Gap, GapProcessingJobData, QueueStats } from './types';
 import { getDefaultQueueOptions, JOB_CONFIG, QUEUE_NAMES } from './config';
+
+const logger = createLogger('queue');
 
 // Global queue instances
 let gapProcessingQueue: Queue<GapProcessingJobData> | null = null;

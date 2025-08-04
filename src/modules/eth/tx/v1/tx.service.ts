@@ -310,7 +310,7 @@ export async function processTransactionGap(
 
     while (currentStartBlock <= toBlock) {
       iterationCount++;
-      
+
       // Update progress if callback provided
       if (progressCallback) {
         await progressCallback({
@@ -363,14 +363,14 @@ export async function processTransactionGap(
         // We likely hit the limit, need to continue from the last transaction's block
         const lastTransaction = transactions[transactions.length - 1];
         const lastBlockNumber = parseInt(lastTransaction.blockNumber);
-        
+
         // Set actualEndBlock to the last fully processed block
         // We subtract 1 because there might be more transactions in lastBlockNumber
         actualEndBlock = Math.max(actualEndBlock, lastBlockNumber - 1);
-        
+
         // Continue from the last block number - 1 (as per Etherscan docs)
         currentStartBlock = lastBlockNumber - 1;
-        
+
         logger.info('Hit transaction limit, continuing from block', {
           address: normalizedAddress,
           lastBlockNumber,
@@ -417,7 +417,7 @@ export async function processTransactionGap(
     // Important: Save coverage for the actual range we processed, not the requested range
     const coverageFromBlock = fromBlock;
     const coverageToBlock = actualEndBlock;
-    
+
     await saveTransactionBatch(
       normalizedAddress,
       coverageFromBlock,

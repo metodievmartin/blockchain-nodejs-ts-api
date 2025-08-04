@@ -83,16 +83,18 @@ export interface GetTransactionsResponse {
   };
 }
 
+/**
+ * Response for getting balance
+ */
 export interface BalanceResponse {
-  success: true;
-  data: {
-    address: string;
-    balance: string;
-    balanceEth: string;
-    blockNumber: number;
-    cached: boolean;
-    cacheAge?: number;
-  };
+  address: string;
+  balance: string; // Balance in ETH as string (human-readable)
+  balanceWei: string; // Balance in wei as string (precise)
+  blockNumber: number;
+  lastUpdated: string; // ISO timestamp when balance was last fetched/updated
+  cached: boolean;
+  cacheAge?: number; // Cache age in milliseconds
+  source: 'cache' | 'provider' | 'database'; // Data source
 }
 
 export interface CoverageRange {

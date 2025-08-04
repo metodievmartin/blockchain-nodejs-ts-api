@@ -88,3 +88,21 @@ model Coverage {
   @@unique([address, fromBlock, toBlock], name: "uniq_coverage")
   @@map("coverage")
 }
+
+/**
+ * ------------------------------------------------
+ * Balance model - Store balance snapshots
+ * ------------------------------------------------
+ */
+model Balance {
+  id          Int      @id @default(autoincrement())
+  address     String   @unique @db.VarChar(42) // Ethereum address (0x + 40 chars)
+  balance     String   @db.VarChar(78) // Balance in wei as string (up to 78 digits)
+  blockNumber BigInt   @map("block_number") // Block number when balance was fetched
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([address], name: "idx_balance_address")
+  @@index([address, blockNumber], name: "idx_balance_address_block")
+  @@map("balances")
+}

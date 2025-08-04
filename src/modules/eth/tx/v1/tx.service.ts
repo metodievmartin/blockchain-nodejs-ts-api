@@ -12,6 +12,8 @@ import {
   getExistingTransactionsPaginated,
   getTransactionCount,
   saveTransactionBatch,
+  saveBalance,
+  getStoredBalance,
 } from './tx.repository';
 import {
   getEthereumProvider,
@@ -468,17 +470,19 @@ export async function processTransactionGap(
 }
 
 /**
- * Get balance for an address with Redis caching
+ * Get balance for an address with database persistence and fallback
  * @param address - Ethereum address
- * @returns Balance data with cache information
+ * @returns Balance information with ETH and wei values
  */
 export async function getBalance(address: string): Promise<{
   address: string;
-  balance: string;
-  balanceEth: string;
+  balance: string; // ETH as string (human-readable)
+  balanceWei: string; // Wei as string (precise)
   blockNumber: number;
+  lastUpdated: string; // ISO timestamp
   cached: boolean;
   cacheAge?: number;
+  source: 'cache' | 'provider' | 'database';
 }> {
   const startTime = performance.now();
   const normalizedAddress = validateAndNormalizeAddress(address);
@@ -488,7 +492,7 @@ export async function getBalance(address: string): Promise<{
   // Try cache first
   const cached = await getCachedBalance(normalizedAddress);
   if (cached) {
-    const cacheAge = performance.now() - cached.cachedAt;
+    const cacheAge = Date.now() - cached.cachedAt;
 
     logger.info('Returning cached balance', {
       address: normalizedAddress,
@@ -499,37 +503,109 @@ export async function getBalance(address: string): Promise<{
 
     return {
       address: normalizedAddress,
-      balance: cached.balance,
-      balanceEth: ethers.formatEther(cached.balance),
+      balance: ethers.formatEther(cached.balance),
+      balanceWei: cached.balance,
       blockNumber: cached.blockNumber,
+      lastUpdated: new Date(cached.cachedAt).toISOString(),
       cached: true,
       cacheAge,
+      source: 'cache',
     };
   }
 
-  // Fetch fresh data
-  const provider = getEthereumProvider();
-  const [balance, blockNumber] = await Promise.all([
-    provider.getBalance(normalizedAddress),
-    provider.getBlockNumber(),
-  ]);
+  // Try to fetch fresh data from provider
+  try {
+    const provider = getEthereumProvider();
+    const [balance, blockNumber] = await Promise.all([
+      provider.getBalance(normalizedAddress),
+      provider.getBlockNumber(),
+    ]);
 
-  // Cache the result
-  await setCachedBalance(normalizedAddress, balance.toString(), blockNumber);
+    const balanceWei = balance.toString();
+    const balanceEth = ethers.formatEther(balance);
+    const lastUpdated = new Date().toISOString();
 
-  logger.info('Fetched fresh balance', {
-    address: normalizedAddress,
-    blockNumber,
-    responseTime: performance.now() - startTime,
-  });
+    // Save to the database for future fallback
+    try {
+      await saveBalance(normalizedAddress, balanceWei, BigInt(blockNumber));
+    } catch (dbError) {
+      logger.warn('Failed to save balance to database', {
+        address: normalizedAddress,
+        error: dbError instanceof Error ? dbError.message : String(dbError),
+      });
+      // Continue even if DB save fails
+    }
 
-  return {
-    address: normalizedAddress,
-    balance: balance.toString(),
-    balanceEth: ethers.formatEther(balance),
-    blockNumber,
-    cached: false,
-  };
+    // Cache the result
+    await setCachedBalance(normalizedAddress, balanceWei, blockNumber);
+
+    logger.info('Fetched fresh balance from provider', {
+      address: normalizedAddress,
+      blockNumber,
+      responseTime: performance.now() - startTime,
+    });
+
+    return {
+      address: normalizedAddress,
+      balance: balanceEth,
+      balanceWei,
+      blockNumber,
+      lastUpdated,
+      cached: false,
+      source: 'provider',
+    };
+  } catch (providerError) {
+    logger.warn('Provider failed, trying database fallback', {
+      address: normalizedAddress,
+      error:
+        providerError instanceof Error
+          ? providerError.message
+          : String(providerError),
+    });
+
+    // Fallback to database
+    try {
+      const storedBalance = await getStoredBalance(normalizedAddress);
+
+      if (storedBalance) {
+        const balanceEth = ethers.formatEther(storedBalance.balance);
+
+        logger.info('Returning balance from database fallback', {
+          address: normalizedAddress,
+          blockNumber: storedBalance.blockNumber.toString(),
+          lastUpdated: storedBalance.updatedAt,
+          responseTime: performance.now() - startTime,
+        });
+
+        return {
+          address: normalizedAddress,
+          balance: balanceEth,
+          balanceWei: storedBalance.balance,
+          blockNumber: Number(storedBalance.blockNumber),
+          lastUpdated: storedBalance.updatedAt.toISOString(),
+          cached: false,
+          source: 'database',
+        };
+      }
+    } catch (dbError) {
+      logger.error('Database fallback also failed', {
+        address: normalizedAddress,
+        error: dbError instanceof Error ? dbError.message : String(dbError),
+      });
+    }
+
+    // If both provider and database fail, throw the original provider error
+    logger.error('All balance sources failed', {
+      address: normalizedAddress,
+      providerError:
+        providerError instanceof Error
+          ? providerError.message
+          : String(providerError),
+      responseTime: performance.now() - startTime,
+    });
+
+    throw providerError;
+  }
 }
 
 /**

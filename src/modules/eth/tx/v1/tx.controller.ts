@@ -3,14 +3,14 @@
  * ---------------------------------
  * HTTP request handlers for blockchain endpoints
  */
-import { Request, Response } from 'express';
 import { z } from 'zod';
+import { Request, Response } from 'express';
+
 import { catchAsync } from '../../../../utils/catch-async';
 import { ApiError } from '../../../../utils/api.error';
 import * as txService from './tx.service';
 import {
   AddressParamsSchema,
-  BalanceResponse,
   GetCoverageResponse,
   GetTransactionsQuerySchema,
   GetTransactionsResponse,
@@ -96,12 +96,7 @@ export const getBalance = catchAsync(async (req: Request, res: Response) => {
 
   const result = await txService.getBalance(address);
 
-  const response: BalanceResponse = {
-    success: true,
-    data: result,
-  };
-
-  res.json(response);
+  res.json(result);
 });
 
 /**

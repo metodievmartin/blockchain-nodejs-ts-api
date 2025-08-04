@@ -288,3 +288,90 @@ export interface Gap {
   fromBlock: number;
   toBlock: number;
 }
+
+/**
+ * Save or update balance for an address
+ * @param address - Ethereum address (normalized)
+ * @param balance - Balance in wei as string
+ * @param blockNumber - Block number when balance was fetched
+ */
+export async function saveBalance(
+  address: string,
+  balance: string,
+  blockNumber: bigint
+): Promise<void> {
+  try {
+    const normalizedAddress = address.toLowerCase();
+
+    await prisma.balance.upsert({
+      where: { address: normalizedAddress },
+      update: {
+        balance,
+        blockNumber,
+        updatedAt: new Date(),
+      },
+      create: {
+        address: normalizedAddress,
+        balance,
+        blockNumber,
+      },
+    });
+
+    logger.debug('Balance saved to database', {
+      address: normalizedAddress,
+      balance,
+      blockNumber: blockNumber.toString(),
+    });
+  } catch (error) {
+    logger.error('Error saving balance', {
+      address,
+      balance,
+      blockNumber: blockNumber.toString(),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
+/**
+ * Get stored balance for an address
+ * @param address - Ethereum address (normalized)
+ * @returns Stored balance data or null if not found
+ */
+export async function getStoredBalance(address: string): Promise<{
+  balance: string;
+  blockNumber: bigint;
+  updatedAt: Date;
+} | null> {
+  try {
+    const normalizedAddress = address.toLowerCase();
+
+    const storedBalance = await prisma.balance.findUnique({
+      where: {
+        address: normalizedAddress,
+      },
+      select: {
+        balance: true,
+        blockNumber: true,
+        updatedAt: true,
+      },
+    });
+
+    if (storedBalance) {
+      logger.debug('Retrieved stored balance', {
+        address: normalizedAddress,
+        balance: storedBalance.balance,
+        blockNumber: storedBalance.blockNumber.toString(),
+        updatedAt: storedBalance.updatedAt,
+      });
+    }
+
+    return storedBalance;
+  } catch (error) {
+    logger.error('Error getting stored balance', {
+      address,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}

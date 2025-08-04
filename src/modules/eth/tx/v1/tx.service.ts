@@ -4,6 +4,15 @@
  * Main business logic for blockchain transaction and balance operations
  */
 import { ethers } from 'ethers';
+import { findGapsInCoverage } from '../../shared/gap-finder';
+import { CoverageRange, TransactionResponse } from './tx.dto';
+import {
+  getAllCoverageRanges,
+  getCoverageRanges,
+  getExistingTransactionsPaginated,
+  getTransactionCount,
+  saveTransactionBatch,
+} from './tx.repository';
 import {
   getEthereumProvider,
   getEtherscanProvider,
@@ -24,14 +33,6 @@ import {
   setCachedPaginatedTransactionQuery,
 } from '../../shared/cache.service';
 import { processGapsInBackground } from '../../shared/background-processor';
-import {
-  findGaps,
-  getCoverageRanges,
-  getExistingTransactionsPaginated,
-  getTransactionCount,
-  saveTransactionBatch,
-} from './tx.repository';
-import { CoverageRange } from './tx.dto';
 import logger from '../../../../config/logger';
 
 /**
@@ -53,7 +54,7 @@ export async function getTransactions(
   limit: number = 1000,
   order: 'asc' | 'desc' = 'asc'
 ): Promise<{
-  transactions: any[];
+  transactions: TransactionResponse[];
   fromCache: boolean;
   pagination: {
     page: number;
@@ -66,9 +67,10 @@ export async function getTransactions(
     toBlock?: number;
     source: 'database' | 'etherscan' | 'cache';
     backgroundProcessing?: boolean;
+    incomplete?: boolean;
   };
 }> {
-  const startTime = Date.now();
+  const startTime = performance.now();
 
   // Validate and normalize inputs
   const normalizedAddress = validateAndNormalizeAddress(address);
@@ -106,17 +108,27 @@ export async function getTransactions(
       page,
       limit,
       count: cached.transactions.length,
-      responseTime: Date.now() - startTime,
+      responseTime: performance.now() - startTime,
     });
     return cached;
   }
 
   // Check for gaps in our database coverage
-  const gaps = await findGaps(normalizedAddress, actualFrom, actualTo);
+  const coverageRanges = await getCoverageRanges(
+    normalizedAddress,
+    actualFrom,
+    actualTo
+  );
+  const gaps = findGapsInCoverage(
+    coverageRanges,
+    actualFrom,
+    actualTo,
+    normalizedAddress
+  );
   const hasGaps = gaps.length > 0;
 
   if (!hasGaps) {
-    // No gaps - serve from database
+    // No gaps - serve from the database
     logger.info('Serving from database (no gaps)', {
       address: normalizedAddress,
       page,
@@ -217,15 +229,15 @@ export async function getTransactions(
       result
     );
 
-    // Start background processing to fill database
-    await processGapsInBackground(normalizedAddress, gaps);
+    // Start background processing to fill the database
+    processGapsInBackground(normalizedAddress, gaps);
 
     logger.info('Returned Etherscan result, background processing started', {
       address: normalizedAddress,
       page,
       limit,
       count: transactions.length,
-      responseTime: Date.now() - startTime,
+      responseTime: performance.now() - startTime,
     });
 
     return result;
@@ -235,7 +247,7 @@ export async function getTransactions(
       error: error instanceof Error ? error.message : String(error),
     });
 
-    // Fallback to database even with gaps
+    // Fallback to the database even with gaps
     const dbTransactions = await getExistingTransactionsPaginated(
       normalizedAddress,
       actualFrom,
@@ -262,6 +274,7 @@ export async function getTransactions(
         toBlock: actualTo,
         source: 'database' as const,
         backgroundProcessing: true,
+        incomplete: true, // Indicate that the result is incomplete
       },
     };
   }
@@ -290,7 +303,7 @@ export async function processTransactionGap(
   processedToBlock: number;
   partialRange: boolean;
 }> {
-  const startTime = Date.now();
+  const startTime = performance.now();
   const normalizedAddress = validateAndNormalizeAddress(address);
   const etherscanProvider = getEtherscanProvider();
 
@@ -302,7 +315,7 @@ export async function processTransactionGap(
   });
 
   try {
-    const allTransactions: any[] = [];
+    const allTransactions: TransactionResponse[] = [];
     let currentStartBlock = fromBlock;
     let currentEndBlock = toBlock;
     let iterationCount = 0;
@@ -425,7 +438,7 @@ export async function processTransactionGap(
       mappedTransactions
     );
 
-    const processingTime = Date.now() - startTime;
+    const processingTime = performance.now() - startTime;
     logger.info('Transaction gap processing completed', {
       address: normalizedAddress,
       requestedRange: `${fromBlock}-${toBlock}`,
@@ -467,7 +480,7 @@ export async function getBalance(address: string): Promise<{
   cached: boolean;
   cacheAge?: number;
 }> {
-  const startTime = Date.now();
+  const startTime = performance.now();
   const normalizedAddress = validateAndNormalizeAddress(address);
 
   logger.debug('Processing balance request', { address: normalizedAddress });
@@ -475,13 +488,13 @@ export async function getBalance(address: string): Promise<{
   // Try cache first
   const cached = await getCachedBalance(normalizedAddress);
   if (cached) {
-    const cacheAge = Date.now() - cached.cachedAt;
+    const cacheAge = performance.now() - cached.cachedAt;
 
     logger.info('Returning cached balance', {
       address: normalizedAddress,
       blockNumber: cached.blockNumber,
       cacheAge,
-      responseTime: Date.now() - startTime,
+      responseTime: performance.now() - startTime,
     });
 
     return {
@@ -507,7 +520,7 @@ export async function getBalance(address: string): Promise<{
   logger.info('Fetched fresh balance', {
     address: normalizedAddress,
     blockNumber,
-    responseTime: Date.now() - startTime,
+    responseTime: performance.now() - startTime,
   });
 
   return {
@@ -542,7 +555,7 @@ export async function getAddressCoverage(address: string): Promise<{
   totalBlocks: number;
 }> {
   const normalizedAddress = validateAndNormalizeAddress(address);
-  const ranges = await getCoverageRanges(normalizedAddress);
+  const ranges = await getAllCoverageRanges(normalizedAddress);
 
   const totalBlocks = ranges.reduce(
     (sum, range) => sum + (range.toBlock - range.fromBlock + 1),

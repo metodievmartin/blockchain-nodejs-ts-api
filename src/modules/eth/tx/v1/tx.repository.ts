@@ -3,23 +3,23 @@
  * ---------------------------------
  * Database operations for blockchain transactions and coverage tracking
  */
-import { getOrCreateDB } from '../../../../config/db';
 import logger from '../../../../config/logger';
+import { getOrCreateDB } from '../../../../config/db';
 
 const prisma = getOrCreateDB();
 
 /**
- * Find gaps in coverage for a given address and block range
+ * Get coverage ranges for a given address and block range
  * @param address - Ethereum address (normalised)
  * @param requestedFrom - Starting block number
  * @param requestedTo - Ending block number
- * @returns Array of gaps that need to be filled
+ * @returns Array of coverage ranges that overlap with the requested range
  */
-export async function findGaps(
+export async function getCoverageRanges(
   address: string,
   requestedFrom: number,
   requestedTo: number
-): Promise<Gap[]> {
+): Promise<Array<{ fromBlock: number; toBlock: number }>> {
   try {
     const normalizedAddress = address.toLowerCase();
 
@@ -34,51 +34,16 @@ export async function findGaps(
       select: { fromBlock: true, toBlock: true },
     });
 
-    logger.debug('Found coverage ranges', {
+    logger.debug('Retrieved coverage ranges', {
       address: normalizedAddress,
       requestedFrom,
       requestedTo,
       coverageCount: coverageRanges.length,
     });
 
-    const gaps: Gap[] = [];
-    let cursor = requestedFrom;
-
-    for (const range of coverageRanges) {
-      // If there's a gap before this range
-      if (cursor < range.fromBlock) {
-        gaps.push({
-          fromBlock: cursor,
-          toBlock: range.fromBlock - 1,
-        });
-      }
-
-      // Move cursor past this range
-      cursor = Math.max(cursor, range.toBlock + 1);
-    }
-
-    // If there's a gap after all ranges
-    if (cursor <= requestedTo) {
-      gaps.push({
-        fromBlock: cursor,
-        toBlock: requestedTo,
-      });
-    }
-
-    logger.debug('Calculated gaps', {
-      address: normalizedAddress,
-      requestedFrom,
-      requestedTo,
-      gaps: gaps.length,
-      totalMissingBlocks: gaps.reduce(
-        (sum, gap) => sum + (gap.toBlock - gap.fromBlock + 1),
-        0
-      ),
-    });
-
-    return gaps;
+    return coverageRanges;
   } catch (error) {
-    logger.error('Error finding gaps', {
+    logger.error('Error getting coverage ranges', {
       address,
       requestedFrom,
       requestedTo,
@@ -89,46 +54,41 @@ export async function findGaps(
 }
 
 /**
- * Get existing transactions for an address within a block range
- * @param address - Ethereum address (normalized)
- * @param fromBlock - Starting block number (optional)
- * @param toBlock - Ending block number (optional)
- * @returns Array of transactions
+ * Get all coverage ranges for an address
+ * @param address - Ethereum address (normalised)
+ * @returns Array of all coverage ranges for the address
  */
-export async function getExistingTransactions(
-  address: string,
-  fromBlock?: number,
-  toBlock?: number
-) {
+export async function getAllCoverageRanges(address: string): Promise<
+  Array<{
+    fromBlock: number;
+    toBlock: number;
+    createdAt: Date;
+  }>
+> {
   try {
-    const where: any = {
-      address: address.toLowerCase(),
-    };
+    const normalizedAddress = address.toLowerCase();
 
-    if (fromBlock !== undefined || toBlock !== undefined) {
-      where.blockNumber = {};
-      if (fromBlock !== undefined) where.blockNumber.gte = fromBlock;
-      if (toBlock !== undefined) where.blockNumber.lte = toBlock;
-    }
-
-    const transactions = await prisma.transaction.findMany({
-      where,
-      orderBy: { blockNumber: 'asc' },
+    const coverage = await prisma.coverage.findMany({
+      where: {
+        address: normalizedAddress,
+      },
+      orderBy: { fromBlock: 'asc' },
+      select: {
+        fromBlock: true,
+        toBlock: true,
+        createdAt: true,
+      },
     });
 
-    logger.debug('Retrieved existing transactions', {
-      address,
-      fromBlock,
-      toBlock,
-      count: transactions.length,
+    logger.debug('Retrieved all coverage ranges', {
+      address: normalizedAddress,
+      rangeCount: coverage.length,
     });
 
-    return transactions;
+    return coverage;
   } catch (error) {
-    logger.error('Error getting existing transactions', {
+    logger.error('Error getting all coverage ranges', {
       address,
-      fromBlock,
-      toBlock,
       error: error instanceof Error ? error.message : String(error),
     });
     throw error;
@@ -291,40 +251,6 @@ export async function getTransactionCount(address: string): Promise<number> {
     return count;
   } catch (error) {
     logger.error('Error getting transaction count', {
-      address,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    throw error;
-  }
-}
-
-/**
- * Get coverage information for an address
- * @param address - Ethereum address (normalized)
- * @returns Array of coverage ranges
- */
-export async function getCoverageRanges(address: string) {
-  try {
-    const coverage = await prisma.coverage.findMany({
-      where: {
-        address: address.toLowerCase(),
-      },
-      orderBy: { fromBlock: 'asc' },
-      select: {
-        fromBlock: true,
-        toBlock: true,
-        createdAt: true,
-      },
-    });
-
-    logger.debug('Retrieved coverage ranges', {
-      address,
-      rangeCount: coverage.length,
-    });
-
-    return coverage;
-  } catch (error) {
-    logger.error('Error getting coverage ranges', {
       address,
       error: error instanceof Error ? error.message : String(error),
     });

@@ -30,9 +30,11 @@ import {
 } from '../../shared/transaction-mapper';
 import {
   getCachedBalance,
-  getCachedPaginatedTransactionQuery,
   setCachedBalance,
+  getCachedPaginatedTransactionQuery,
   setCachedPaginatedTransactionQuery,
+  getCachedTransactionCount,
+  setCachedTransactionCount,
 } from '../../shared/cache.service';
 import { processGapsInBackground } from '../../shared/background-processor';
 import logger from '../../../../config/logger';
@@ -609,15 +611,45 @@ export async function getBalance(address: string): Promise<{
 }
 
 /**
- * Get transaction count for an address
+ * Get transaction count for an address with Redis caching
  * @param address - Ethereum address
  * @returns Number of transactions stored
  */
 export async function getStoredTransactionCount(
   address: string
 ): Promise<number> {
+  const startTime = performance.now();
   const normalizedAddress = validateAndNormalizeAddress(address);
-  return await getTransactionCount(normalizedAddress);
+
+  logger.debug('Processing transaction count request', {
+    address: normalizedAddress,
+  });
+
+  // Try cache first
+  const cached = await getCachedTransactionCount(normalizedAddress);
+  if (cached) {
+    logger.info('Returning cached transaction count', {
+      address: normalizedAddress,
+      count: cached,
+      responseTime: performance.now() - startTime,
+    });
+
+    return cached;
+  }
+
+  // Get from database
+  const count = await getTransactionCount(normalizedAddress);
+
+  // Cache the result (5 minutes TTL since transaction counts change relatively frequently)
+  await setCachedTransactionCount(normalizedAddress, count);
+
+  logger.info('Fetched transaction count from database', {
+    address: normalizedAddress,
+    count,
+    responseTime: performance.now() - startTime,
+  });
+
+  return count;
 }
 
 /**

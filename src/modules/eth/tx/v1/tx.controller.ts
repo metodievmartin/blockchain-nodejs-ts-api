@@ -155,7 +155,6 @@ export const getStoredTransactionCount = catchAsync(
     const count = await txService.getStoredTransactionCount(address);
 
     res.json({
-      success: true,
       count,
     });
   }
@@ -163,7 +162,6 @@ export const getStoredTransactionCount = catchAsync(
 
 export const getQueueInfo = catchAsync(async (req: Request, res: Response) => {
   res.json({
-    success: true,
     data: await getQueueStats(),
   });
 });

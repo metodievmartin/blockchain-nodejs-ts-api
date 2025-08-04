@@ -59,6 +59,7 @@ const EnvSchema = z.object({
   // Caching
   BALANCE_CACHE_TTL: z.coerce.number().default(30),
   TX_QUERY_CACHE_TTL: z.coerce.number().default(300),
+  TRANSACTION_COUNT_CACHE_TTL: z.coerce.number().default(300), // 5 minutes default
   
   // RPC settings
   RPC_TIMEOUT: z.coerce.number().default(10000),

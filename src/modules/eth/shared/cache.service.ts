@@ -16,7 +16,14 @@ const CACHE_KEYS = {
   BALANCE: (address: string) => `blockchain:balance:${address.toLowerCase()}`,
   TX_QUERY: (address: string, from: number, to: number) =>
     `blockchain:txquery:${address.toLowerCase()}:${from}:${to}`,
-  TX_PAGINATED: (address: string, fromBlock: number, toBlock: number, page: number, limit: number, order: string) =>
+  TX_PAGINATED: (
+    address: string,
+    fromBlock: number,
+    toBlock: number,
+    page: number,
+    limit: number,
+    order: string
+  ) =>
     `blockchain:tx:paginated:${address.toLowerCase()}:${fromBlock}:${toBlock}:${page}:${limit}:${order}`,
   TX_COUNT: (address: string) => `blockchain:txcount:${address.toLowerCase()}`,
 } as const;
@@ -142,7 +149,14 @@ export async function getCachedPaginatedTransactionQuery(
   order: string
 ): Promise<any | null> {
   try {
-    const key = CACHE_KEYS.TX_PAGINATED(address, fromBlock, toBlock, page, limit, order);
+    const key = CACHE_KEYS.TX_PAGINATED(
+      address,
+      fromBlock,
+      toBlock,
+      page,
+      limit,
+      order
+    );
     const cached = await redis.get(key);
 
     return cached && typeof cached === 'string' ? JSON.parse(cached) : null;
@@ -171,7 +185,14 @@ export async function setCachedPaginatedTransactionQuery(
   ttlSeconds: number = 300 // Default 5 minutes
 ): Promise<void> {
   try {
-    const key = CACHE_KEYS.TX_PAGINATED(address, fromBlock, toBlock, page, limit, order);
+    const key = CACHE_KEYS.TX_PAGINATED(
+      address,
+      fromBlock,
+      toBlock,
+      page,
+      limit,
+      order
+    );
     await redis.setEx(
       key,
       ttlSeconds,
@@ -225,7 +246,7 @@ export async function setCachedTransactionCount(
 ): Promise<void> {
   try {
     const key = CACHE_KEYS.TX_COUNT(address);
-    const ttl = appConfig.blockchain.balanceCacheTtl; // Same TTL as balance
+    const ttl = appConfig.blockchain.transactionCountCacheTtl;
 
     await redis.setEx(key, ttl, count.toString());
 

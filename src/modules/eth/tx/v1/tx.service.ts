@@ -4,52 +4,205 @@
  * Main business logic for blockchain transaction and balance operations
  */
 import { ethers } from 'ethers';
-import { findGapsInCoverage } from '../../shared/gap-finder';
-import { CoverageRange, TransactionResponse } from './tx.dto';
+
+import {
+  CoverageRange,
+  TransactionResponse,
+  GetTransactionsResult,
+  EtherscanTransaction,
+} from './tx.dto';
+import { GapProcessingProgress } from '../../../../types/processing.types';
+
 import {
   getAllCoverageRanges,
   getCoverageRanges,
   getExistingTransactionsPaginated,
-  getTransactionCount,
-  saveTransactionBatch,
-  saveBalance,
   getStoredBalance,
+  getTransactionCount,
+  saveBalance,
+  saveTransactionBatch,
 } from './tx.repository';
 import {
   getEthereumProvider,
   getEtherscanProvider,
 } from '../../shared/provider';
 import {
+  getCachedAddressInfo,
+  getCachedBalance,
+  getCachedPaginatedTransactionQuery,
+  getCachedTransactionCount,
+  setCachedAddressInfo,
+  setCachedBalance,
+  setCachedPaginatedTransactionQuery,
+  setCachedTransactionCount,
+} from '../../shared/cache.service';
+import {
   validateAndNormalizeAddress,
   validateBlockRange,
 } from '../../shared/address-validator';
 import {
-  detectAddressInfo,
+  discoverAddressInfo,
   type AddressInfo,
 } from '../../shared/contract-detector';
-import {
-  getCachedAddressInfo,
-  setCachedAddressInfo,
-} from '../../shared/cache.service';
 import {
   mapDBTransactionToAPI,
   mapEtherscanTransactionToAPI,
   mapEtherscanTransactionToDB,
 } from '../../shared/transaction-mapper';
 import {
-  getCachedBalance,
-  setCachedBalance,
-  getCachedPaginatedTransactionQuery,
-  setCachedPaginatedTransactionQuery,
-  getCachedTransactionCount,
-  setCachedTransactionCount,
-} from '../../shared/cache.service';
-import { processGapsInBackground } from '../../shared/background-processor';
-import logger from '../../../../config/logger';
-import {
   getAddressInfoFromDB,
   saveAddressInfoToDB,
 } from '../../shared/address-info.repository';
+import logger from '../../../../config/logger';
+import { findGapsInCoverage } from '../../shared/gap-finder';
+import { processGapsInBackground } from '../../shared/background-processor';
+
+/**
+ * Configuration constants
+ */
+const TX_SERVICE_CONFIG = {
+  MAX_TRANSACTIONS_PER_BATCH: 5000,
+  DEFAULT_PAGE: 1,
+  DEFAULT_LIMIT: 1000,
+  MAX_LIMIT: 1000,
+} as const;
+
+/**
+ * Handle database-only response when no gaps exist
+ */
+async function fetchTransactionsFromDatabase(
+  normalizedAddress: string,
+  actualFrom: number,
+  actualTo: number,
+  page: number,
+  limit: number,
+  order: 'asc' | 'desc',
+  options: {
+    incomplete?: boolean;
+  } = {}
+): Promise<GetTransactionsResult> {
+  logger.info('Serving from database (no gaps)', {
+    address: normalizedAddress,
+    page,
+    limit,
+  });
+
+  const dbTransactions = await getExistingTransactionsPaginated(
+    normalizedAddress,
+    actualFrom,
+    actualTo,
+    page,
+    limit,
+    order
+  );
+
+  const transactions = dbTransactions.map(mapDBTransactionToAPI);
+  const hasMore = transactions.length === limit;
+
+  const metadata: GetTransactionsResult['metadata'] = {
+    address: normalizedAddress,
+    fromBlock: actualFrom,
+    toBlock: actualTo,
+    source: 'database' as const,
+  };
+
+  if (options.incomplete) {
+    metadata.incomplete = options.incomplete;
+  }
+
+  return {
+    transactions,
+    fromCache: false,
+    pagination: {
+      page,
+      limit,
+      hasMore,
+    },
+    metadata,
+  };
+}
+
+/**
+ * Handle Etherscan fallback when gaps exist
+ */
+async function fetchTransactionsFromEtherscan(
+  normalizedAddress: string,
+  actualFrom: number,
+  actualTo: number,
+  page: number,
+  limit: number,
+  order: 'asc' | 'desc',
+  gaps: any[]
+): Promise<GetTransactionsResult> {
+  logger.info('Gaps detected, fetching from Etherscan', {
+    address: normalizedAddress,
+    gaps: gaps.length,
+    page,
+    limit,
+  });
+
+  const etherscanProvider = getEtherscanProvider();
+
+  try {
+    const params = {
+      action: 'txlist',
+      address: normalizedAddress,
+      startblock: actualFrom,
+      endblock: actualTo,
+      offset: limit,
+      page: page,
+      sort: order,
+    };
+    const etherscanTxs = await etherscanProvider.fetch('account', params);
+    const transactions = etherscanTxs || [];
+    const hasMore = transactions.length === limit;
+
+    const result: GetTransactionsResult = {
+      transactions: transactions.map((tx: EtherscanTransaction) =>
+        mapEtherscanTransactionToAPI(tx, normalizedAddress)
+      ),
+      fromCache: false,
+      pagination: {
+        page,
+        limit,
+        hasMore,
+      },
+      metadata: {
+        address: normalizedAddress,
+        fromBlock: actualFrom,
+        toBlock: actualTo,
+        source: 'etherscan' as const,
+      },
+    };
+
+    logger.info('Returned Etherscan result', {
+      address: normalizedAddress,
+      page,
+      limit,
+      count: transactions.length,
+    });
+
+    return result;
+  } catch (error) {
+    logger.error('Etherscan fetch failed, falling back to database', {
+      address: normalizedAddress,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    // Fallback to the database even with gaps
+    return fetchTransactionsFromDatabase(
+      normalizedAddress,
+      actualFrom,
+      actualTo,
+      page,
+      limit,
+      order,
+      {
+        incomplete: true,
+      }
+    );
+  }
+}
 
 /**
  * Get paginated transactions for an address
@@ -66,26 +219,10 @@ export async function getTransactions(
   address: string,
   fromBlock?: number,
   toBlock?: number,
-  page: number = 1,
-  limit: number = 1000,
+  page: number = TX_SERVICE_CONFIG.DEFAULT_PAGE,
+  limit: number = TX_SERVICE_CONFIG.DEFAULT_LIMIT,
   order: 'asc' | 'desc' = 'asc'
-): Promise<{
-  transactions: TransactionResponse[];
-  fromCache: boolean;
-  pagination: {
-    page: number;
-    limit: number;
-    hasMore?: boolean;
-  };
-  metadata: {
-    address: string;
-    fromBlock?: number;
-    toBlock?: number;
-    source: 'database' | 'etherscan' | 'cache';
-    backgroundProcessing?: boolean;
-    incomplete?: boolean;
-  };
-}> {
+): Promise<GetTransactionsResult> {
   const startTime = performance.now();
 
   // Validate and normalize inputs
@@ -93,10 +230,10 @@ export async function getTransactions(
   validateBlockRange(fromBlock, toBlock);
 
   const provider = getEthereumProvider();
-  const etherscanProvider = getEtherscanProvider();
 
   // Determine actual block range
-  const actualFrom = fromBlock ?? (await getStartingBlock(normalizedAddress));
+  const actualFrom =
+    fromBlock ?? (await resolveStartingBlock(normalizedAddress));
   const actualTo = toBlock ?? (await provider.getBlockNumber());
 
   logger.info('Processing paginated transaction request', {
@@ -118,7 +255,7 @@ export async function getTransactions(
     order
   );
   if (cached) {
-    logger.info('Returning cached paginated result', {
+    logger.debug('Returning cached paginated result', {
       address: normalizedAddress,
       page,
       limit,
@@ -144,13 +281,7 @@ export async function getTransactions(
 
   if (!hasGaps) {
     // No gaps - serve from the database
-    logger.info('Serving from database (no gaps)', {
-      address: normalizedAddress,
-      page,
-      limit,
-    });
-
-    const dbTransactions = await getExistingTransactionsPaginated(
+    const result = await fetchTransactionsFromDatabase(
       normalizedAddress,
       actualFrom,
       actualTo,
@@ -158,25 +289,6 @@ export async function getTransactions(
       limit,
       order
     );
-
-    const transactions = dbTransactions.map(mapDBTransactionToAPI);
-    const hasMore = transactions.length === limit;
-
-    const result = {
-      transactions,
-      fromCache: false,
-      pagination: {
-        page,
-        limit,
-        hasMore,
-      },
-      metadata: {
-        address: normalizedAddress,
-        fromBlock: actualFrom,
-        toBlock: actualTo,
-        source: 'database' as const,
-      },
-    };
 
     // Cache the result
     await setCachedPaginatedTransactionQuery(
@@ -193,106 +305,43 @@ export async function getTransactions(
   }
 
   // Gaps exist - fetch from Etherscan for immediate response
-  logger.info('Gaps detected, fetching from Etherscan', {
-    address: normalizedAddress,
-    gaps: gaps.length,
+  const result = await fetchTransactionsFromEtherscan(
+    normalizedAddress,
+    actualFrom,
+    actualTo,
     page,
     limit,
+    order,
+    gaps
+  );
+
+  // Cache the result
+  await setCachedPaginatedTransactionQuery(
+    normalizedAddress,
+    actualFrom,
+    actualTo,
+    page,
+    limit,
+    order,
+    result
+  );
+
+  // Start background processing to fill the database (non-blocking)
+  setImmediate(() => {
+    processGapsInBackground(normalizedAddress, gaps).catch((error) => {
+      logger.error('Background gap processing failed', {
+        address: normalizedAddress,
+        gapsCount: gaps.length,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Don't throw - just log the error so it doesn't crash anything
+    });
   });
 
-  try {
-    const params = {
-      action: 'txlist',
-      address: normalizedAddress,
-      startblock: actualFrom,
-      endblock: actualTo,
-      offset: limit,
-      page: page,
-      sort: order,
-    };
-    const etherscanTxs = await etherscanProvider.fetch('account', params);
-    const transactions = etherscanTxs || [];
-    const hasMore = transactions.length === limit;
+  // Set backgroundProcessing flag since we've scheduled background work
+  result.metadata.backgroundProcessing = true;
 
-    const result = {
-      transactions: transactions.map((tx) =>
-        mapEtherscanTransactionToAPI(tx, normalizedAddress)
-      ),
-      fromCache: false,
-      pagination: {
-        page,
-        limit,
-        hasMore,
-      },
-      metadata: {
-        address: normalizedAddress,
-        fromBlock: actualFrom,
-        toBlock: actualTo,
-        source: 'etherscan' as const,
-        backgroundProcessing: true,
-      },
-    };
-
-    // Cache the result
-    await setCachedPaginatedTransactionQuery(
-      normalizedAddress,
-      actualFrom,
-      actualTo,
-      page,
-      limit,
-      order,
-      result
-    );
-
-    // Start background processing to fill the database
-    processGapsInBackground(normalizedAddress, gaps);
-
-    logger.info('Returned Etherscan result, background processing started', {
-      address: normalizedAddress,
-      page,
-      limit,
-      count: transactions.length,
-      responseTime: performance.now() - startTime,
-    });
-
-    return result;
-  } catch (error) {
-    logger.error('Etherscan fetch failed, falling back to database', {
-      address: normalizedAddress,
-      error: error instanceof Error ? error.message : String(error),
-    });
-
-    // Fallback to the database even with gaps
-    const dbTransactions = await getExistingTransactionsPaginated(
-      normalizedAddress,
-      actualFrom,
-      actualTo,
-      page,
-      limit,
-      order
-    );
-
-    const transactions = dbTransactions.map(mapDBTransactionToAPI);
-    const hasMore = transactions.length === limit;
-
-    return {
-      transactions,
-      fromCache: false,
-      pagination: {
-        page,
-        limit,
-        hasMore,
-      },
-      metadata: {
-        address: normalizedAddress,
-        fromBlock: actualFrom,
-        toBlock: actualTo,
-        source: 'database' as const,
-        backgroundProcessing: true,
-        incomplete: true, // Indicate that the result is incomplete
-      },
-    };
-  }
+  return result;
 }
 
 /**
@@ -518,8 +567,8 @@ export async function processTransactionGap(
   address: string,
   fromBlock: number,
   toBlock: number,
-  maxTransactionsPerBatch: number = 5000,
-  progressCallback?: (progress: any) => Promise<void>
+  maxTransactionsPerBatch: number = TX_SERVICE_CONFIG.MAX_TRANSACTIONS_PER_BATCH,
+  progressCallback?: (progress: GapProcessingProgress) => Promise<void>
 ): Promise<{
   transactionCount: number;
   pages: number;
@@ -579,6 +628,7 @@ export async function processTransactionGap(
 
       const etherscanTxs = await etherscanProvider.fetch('account', params);
       const transactions = etherscanTxs || [];
+      const hasMore = transactions.length === maxTransactionsPerBatch;
 
       if (transactions.length === 0) {
         // No more transactions in this range
@@ -596,7 +646,7 @@ export async function processTransactionGap(
       allTransactions.push(...filteredTransactions);
 
       // Check if we got the maximum number of transactions (hit the limit)
-      if (transactions.length === maxTransactionsPerBatch) {
+      if (hasMore) {
         // We likely hit the limit, need to continue from the last transaction's block
         const lastTransaction = transactions[transactions.length - 1];
         const lastBlockNumber = parseInt(lastTransaction.blockNumber);
@@ -692,11 +742,15 @@ export async function processTransactionGap(
 }
 
 /**
- * Get starting block for an address
- * @param address - Ethereum address
- * @returns Starting block number
+ * Resolves the appropriate starting block for an address based on its type
+ * Implements 3-tier caching: Redis → Database → Provider detection
+ *
+ * Note: Combines pure fetching with caching side effects for optimal performance and simplicity.
+ *
+ * @param address - The address to resolve starting block for
+ * @returns Starting block number (creation block for contracts, 0 for EOAs)
  */
-export async function getStartingBlock(address: string): Promise<number> {
+export async function resolveStartingBlock(address: string): Promise<number> {
   // 1. Try cache first
   const cachedAddressInfo = await getCachedAddressInfo(address);
   if (cachedAddressInfo) {
@@ -720,7 +774,7 @@ export async function getStartingBlock(address: string): Promise<number> {
   }
 
   // 3. Find the address info scanning the blockchain
-  const addressInfo = await detectAddressInfo(address);
+  const addressInfo = await discoverAddressInfo(address);
 
   await Promise.all([
     // Save to the database

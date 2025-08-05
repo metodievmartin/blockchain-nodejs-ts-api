@@ -50,6 +50,45 @@ export type GetTransactionsQuery = z.infer<typeof GetTransactionsQuerySchema>;
 export type AddressParams = z.infer<typeof AddressParamsSchema>;
 
 /**
+ * Etherscan API transaction response structure
+ */
+export interface EtherscanTransaction {
+  blockNumber: string;
+  hash: string;
+  from: string;
+  to: string;
+  value: string;
+  gasPrice: string;
+  gasUsed: string;
+  gas: string;
+  functionName?: string;
+  contractAddress?: string;
+  timeStamp: string;
+  isError: string;
+}
+
+/**
+ * Complete transaction response structure for getTransactions
+ */
+export interface GetTransactionsResult {
+  transactions: TransactionResponse[];
+  fromCache: boolean;
+  pagination: {
+    page: number;
+    limit: number;
+    hasMore?: boolean;
+  };
+  metadata: {
+    address: string;
+    fromBlock?: number;
+    toBlock?: number;
+    source: 'database' | 'etherscan' | 'cache';
+    backgroundProcessing?: boolean;
+    incomplete?: boolean;
+  };
+}
+
+/**
  * Response DTOs
  */
 /**

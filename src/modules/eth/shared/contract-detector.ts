@@ -4,8 +4,9 @@
  * Pure utility functions for detecting contracts and finding their creation blocks
  */
 import { ethers } from 'ethers';
-import { getEthereumProvider } from './provider';
+
 import logger from '../../../config/logger';
+import { getEthereumProvider } from './provider';
 
 /**
  * Address info interface
@@ -16,12 +17,12 @@ export interface AddressInfo {
 }
 
 /**
- * Determines if an address is a contract and finds its creation block
+ * Discovers if an address is a contract and finds its creation block
  * Pure function without caching - caching should be handled by the caller
  * @param address - The address to check (must be checksummed)
  * @returns Object with isContract flag and creationBlock (if contract)
  */
-export async function detectAddressInfo(address: string): Promise<AddressInfo> {
+export async function discoverAddressInfo(address: string): Promise<AddressInfo> {
   const provider = getEthereumProvider();
   
   try {

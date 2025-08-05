@@ -4,6 +4,7 @@
  * Type definitions for blockchain API requests and responses
  */
 import { z } from 'zod';
+import { ethers } from 'ethers';
 
 /**
  * Request DTOs
@@ -31,10 +32,18 @@ export const GetTransactionsQuerySchema = z
     }
   );
 
+/**
+ * Schema for validating and transforming Ethereum addresses to checksum format
+ */
 export const AddressParamsSchema = z.object({
-  address: z
-    .string()
-    .regex(/^0x[a-fA-F0-9]{40}$/, 'Invalid Ethereum address format'),
+  address: z.string().transform((address, ctx) => {
+    try {
+      // Validate and transform to checksum format using ethers
+      return ethers.getAddress(address.toLowerCase());
+    } catch (error) {
+      ctx.addIssue('Invalid Ethereum address');
+    }
+  }),
 });
 
 export type GetTransactionsQuery = z.infer<typeof GetTransactionsQuerySchema>;

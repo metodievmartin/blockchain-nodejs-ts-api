@@ -285,193 +285,6 @@ export async function getTransactions(
 }
 
 /**
- * Process a transaction gap (business logic for workers)
- * This function is exported for use by background workers
- * @param address - Ethereum address
- * @param fromBlock - Starting block number
- * @param toBlock - Ending block number
- * @param maxTransactionsPerBatch - Maximum transactions per API call
- * @param progressCallback - Optional progress callback function
- * @returns Processing result with transaction count and pages
- */
-export async function processTransactionGap(
-  address: string,
-  fromBlock: number,
-  toBlock: number,
-  maxTransactionsPerBatch: number = 5000,
-  progressCallback?: (progress: any) => Promise<void>
-): Promise<{
-  transactionCount: number;
-  pages: number;
-  processedFromBlock: number;
-  processedToBlock: number;
-  partialRange: boolean;
-}> {
-  const startTime = performance.now();
-  const normalizedAddress = validateAndNormalizeAddress(address);
-  const etherscanProvider = getEtherscanProvider();
-
-  logger.info('Processing transaction gap', {
-    address: normalizedAddress,
-    fromBlock,
-    toBlock,
-    blocks: toBlock - fromBlock + 1,
-  });
-
-  try {
-    const allTransactions: TransactionResponse[] = [];
-    let currentStartBlock = fromBlock;
-    let currentEndBlock = toBlock;
-    let iterationCount = 0;
-    let actualEndBlock = fromBlock - 1; // Track the actual end block we've fully processed
-
-    while (currentStartBlock <= toBlock) {
-      iterationCount++;
-
-      // Update progress if callback provided
-      if (progressCallback) {
-        await progressCallback({
-          phase: 'fetching',
-          page: iterationCount,
-          totalPages: '?',
-          currentBlock: currentStartBlock,
-          targetBlock: toBlock,
-        });
-      }
-
-      const params = {
-        action: 'txlist',
-        address: normalizedAddress,
-        startblock: currentStartBlock,
-        endblock: currentEndBlock,
-        page: 1, // Always use page 1 with block-based pagination
-        offset: maxTransactionsPerBatch,
-        sort: 'asc',
-      };
-
-      logger.debug('Fetching transactions from Etherscan (block-based)', {
-        address: normalizedAddress,
-        startBlock: currentStartBlock,
-        endBlock: currentEndBlock,
-        iteration: iterationCount,
-        offset: maxTransactionsPerBatch,
-      });
-
-      const etherscanTxs = await etherscanProvider.fetch('account', params);
-      const transactions = etherscanTxs || [];
-
-      if (transactions.length === 0) {
-        // No more transactions in this range
-        actualEndBlock = currentEndBlock;
-        break;
-      }
-
-      // Filter transactions to ensure they're within our block range
-      const filteredTransactions = transactions.filter(
-        (tx: any) =>
-          parseInt(tx.blockNumber) >= currentStartBlock &&
-          parseInt(tx.blockNumber) <= currentEndBlock
-      );
-
-      allTransactions.push(...filteredTransactions);
-
-      // Check if we got the maximum number of transactions (hit the limit)
-      if (transactions.length === maxTransactionsPerBatch) {
-        // We likely hit the limit, need to continue from the last transaction's block
-        const lastTransaction = transactions[transactions.length - 1];
-        const lastBlockNumber = parseInt(lastTransaction.blockNumber);
-
-        // Set actualEndBlock to the last fully processed block
-        // We subtract 1 because there might be more transactions in lastBlockNumber
-        actualEndBlock = Math.max(actualEndBlock, lastBlockNumber - 1);
-
-        // Continue from the last block number - 1 (as per Etherscan docs)
-        currentStartBlock = lastBlockNumber - 1;
-
-        logger.info('Hit transaction limit, continuing from block', {
-          address: normalizedAddress,
-          lastBlockNumber,
-          nextStartBlock: currentStartBlock,
-          transactionsFetched: allTransactions.length,
-          iteration: iterationCount,
-        });
-      } else {
-        // We got fewer transactions than the limit, so we've processed the full range
-        actualEndBlock = currentEndBlock;
-        break;
-      }
-
-      // Safety check to prevent infinite loops
-      if (iterationCount > 100) {
-        logger.warn('Too many iterations in block-based pagination, stopping', {
-          address: normalizedAddress,
-          fromBlock,
-          toBlock,
-          currentStartBlock,
-          iterations: iterationCount,
-          transactionsFetched: allTransactions.length,
-        });
-        break;
-      }
-    }
-
-    // Update progress for saving phase
-    if (progressCallback) {
-      await progressCallback({
-        phase: 'saving',
-        transactions: allTransactions.length,
-        blocksProcessed: actualEndBlock - fromBlock + 1,
-        totalBlocks: toBlock - fromBlock + 1,
-      });
-    }
-
-    // Map transactions to database format
-    const mappedTransactions = allTransactions.map((tx) =>
-      mapEtherscanTransactionToDB(tx, normalizedAddress)
-    );
-
-    // Save transactions and coverage to database
-    // Important: Save coverage for the actual range we processed, not the requested range
-    const coverageFromBlock = fromBlock;
-    const coverageToBlock = actualEndBlock;
-
-    await saveTransactionBatch(
-      normalizedAddress,
-      coverageFromBlock,
-      coverageToBlock,
-      mappedTransactions
-    );
-
-    const processingTime = performance.now() - startTime;
-    logger.info('Transaction gap processing completed', {
-      address: normalizedAddress,
-      requestedRange: `${fromBlock}-${toBlock}`,
-      processedRange: `${coverageFromBlock}-${coverageToBlock}`,
-      transactionCount: mappedTransactions.length,
-      iterations: iterationCount,
-      processingTime,
-      partialRange: actualEndBlock < toBlock,
-    });
-
-    return {
-      transactionCount: mappedTransactions.length,
-      pages: iterationCount,
-      processedFromBlock: coverageFromBlock,
-      processedToBlock: coverageToBlock,
-      partialRange: actualEndBlock < toBlock,
-    };
-  } catch (error) {
-    logger.error('Error processing transaction gap', {
-      address: normalizedAddress,
-      fromBlock,
-      toBlock,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    throw error;
-  }
-}
-
-/**
  * Get balance for an address with database persistence and fallback
  * @param address - Ethereum address
  * @returns Balance information with ETH and wei values
@@ -488,7 +301,6 @@ export async function getBalance(address: string): Promise<{
 }> {
   const startTime = performance.now();
   const normalizedAddress = validateAndNormalizeAddress(address);
-
   logger.debug('Processing balance request', { address: normalizedAddress });
 
   // Try cache first
@@ -679,4 +491,191 @@ export async function getAddressCoverage(address: string): Promise<{
     })),
     totalBlocks,
   };
+}
+
+/**
+ * Process a transaction gap (business logic for workers)
+ * This function is exported for use by background workers
+ * @param address - Ethereum address
+ * @param fromBlock - Starting block number
+ * @param toBlock - Ending block number
+ * @param maxTransactionsPerBatch - Maximum transactions per API call
+ * @param progressCallback - Optional progress callback function
+ * @returns Processing result with transaction count and pages
+ */
+export async function processTransactionGap(
+  address: string,
+  fromBlock: number,
+  toBlock: number,
+  maxTransactionsPerBatch: number = 5000,
+  progressCallback?: (progress: any) => Promise<void>
+): Promise<{
+  transactionCount: number;
+  pages: number;
+  processedFromBlock: number;
+  processedToBlock: number;
+  partialRange: boolean;
+}> {
+  const startTime = performance.now();
+  const normalizedAddress = validateAndNormalizeAddress(address);
+  const etherscanProvider = getEtherscanProvider();
+
+  logger.info('Processing transaction gap', {
+    address: normalizedAddress,
+    fromBlock,
+    toBlock,
+    blocks: toBlock - fromBlock + 1,
+  });
+
+  try {
+    const allTransactions: TransactionResponse[] = [];
+    let currentStartBlock = fromBlock;
+    let currentEndBlock = toBlock;
+    let iterationCount = 0;
+    let actualEndBlock = fromBlock - 1; // Track the actual end block we've fully processed
+
+    while (currentStartBlock <= toBlock) {
+      iterationCount++;
+
+      // Update progress if callback provided
+      if (progressCallback) {
+        await progressCallback({
+          phase: 'fetching',
+          page: iterationCount,
+          totalPages: '?',
+          currentBlock: currentStartBlock,
+          targetBlock: toBlock,
+        });
+      }
+
+      const params = {
+        action: 'txlist',
+        address: normalizedAddress,
+        startblock: currentStartBlock,
+        endblock: currentEndBlock,
+        page: 1, // Always use page 1 with block-based pagination
+        offset: maxTransactionsPerBatch,
+        sort: 'asc',
+      };
+
+      logger.debug('Fetching transactions from Etherscan (block-based)', {
+        address: normalizedAddress,
+        startBlock: currentStartBlock,
+        endBlock: currentEndBlock,
+        iteration: iterationCount,
+        offset: maxTransactionsPerBatch,
+      });
+
+      const etherscanTxs = await etherscanProvider.fetch('account', params);
+      const transactions = etherscanTxs || [];
+
+      if (transactions.length === 0) {
+        // No more transactions in this range
+        actualEndBlock = currentEndBlock;
+        break;
+      }
+
+      // Filter transactions to ensure they're within our block range
+      const filteredTransactions = transactions.filter(
+        (tx: any) =>
+          parseInt(tx.blockNumber) >= currentStartBlock &&
+          parseInt(tx.blockNumber) <= currentEndBlock
+      );
+
+      allTransactions.push(...filteredTransactions);
+
+      // Check if we got the maximum number of transactions (hit the limit)
+      if (transactions.length === maxTransactionsPerBatch) {
+        // We likely hit the limit, need to continue from the last transaction's block
+        const lastTransaction = transactions[transactions.length - 1];
+        const lastBlockNumber = parseInt(lastTransaction.blockNumber);
+
+        // Set actualEndBlock to the last fully processed block
+        // We subtract 1 because there might be more transactions in lastBlockNumber
+        actualEndBlock = Math.max(actualEndBlock, lastBlockNumber - 1);
+
+        // Continue from the last block number - 1 (as per Etherscan docs)
+        currentStartBlock = lastBlockNumber - 1;
+
+        logger.info('Hit transaction limit, continuing from block', {
+          address: normalizedAddress,
+          lastBlockNumber,
+          nextStartBlock: currentStartBlock,
+          transactionsFetched: allTransactions.length,
+          iteration: iterationCount,
+        });
+      } else {
+        // We got fewer transactions than the limit, so we've processed the full range
+        actualEndBlock = currentEndBlock;
+        break;
+      }
+
+      // Safety check to prevent infinite loops
+      if (iterationCount > 100) {
+        logger.warn('Too many iterations in block-based pagination, stopping', {
+          address: normalizedAddress,
+          fromBlock,
+          toBlock,
+          currentStartBlock,
+          iterations: iterationCount,
+          transactionsFetched: allTransactions.length,
+        });
+        break;
+      }
+    }
+
+    // Update progress for saving phase
+    if (progressCallback) {
+      await progressCallback({
+        phase: 'saving',
+        transactions: allTransactions.length,
+        blocksProcessed: actualEndBlock - fromBlock + 1,
+        totalBlocks: toBlock - fromBlock + 1,
+      });
+    }
+
+    // Map transactions to database format
+    const mappedTransactions = allTransactions.map((tx) =>
+      mapEtherscanTransactionToDB(tx, normalizedAddress)
+    );
+
+    // Save transactions and coverage to database
+    // Important: Save coverage for the actual range we processed, not the requested range
+    const coverageFromBlock = fromBlock;
+    const coverageToBlock = actualEndBlock;
+
+    await saveTransactionBatch(
+      normalizedAddress,
+      coverageFromBlock,
+      coverageToBlock,
+      mappedTransactions
+    );
+
+    const processingTime = performance.now() - startTime;
+    logger.info('Transaction gap processing completed', {
+      address: normalizedAddress,
+      requestedRange: `${fromBlock}-${toBlock}`,
+      processedRange: `${coverageFromBlock}-${coverageToBlock}`,
+      transactionCount: mappedTransactions.length,
+      iterations: iterationCount,
+      processingTime,
+      partialRange: actualEndBlock < toBlock,
+    });
+
+    return {
+      transactionCount: mappedTransactions.length,
+      pages: iterationCount,
+      processedFromBlock: coverageFromBlock,
+      processedToBlock: coverageToBlock,
+      partialRange: actualEndBlock < toBlock,
+    };
+  } catch (error) {
+    logger.error('Error processing transaction gap', {
+      address: normalizedAddress,
+      fromBlock,
+      toBlock,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }

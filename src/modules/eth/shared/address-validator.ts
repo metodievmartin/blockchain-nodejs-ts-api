@@ -4,20 +4,20 @@
  * Utilities for validating and normalizing Ethereum addresses
  */
 import { ethers } from 'ethers';
+
 import { ApiError } from '../../../utils/api.error';
 
 /**
- * Validates and normalizes an Ethereum address
+ * Validates and normalises an Ethereum address
  * @param address - Raw address string to validate
  * @returns Normalized (checksummed) address
  * @throws ApiError if address is invalid
  */
 export function validateAndNormalizeAddress(address: string): string {
   try {
-    // ethers.getAddress() validates and returns checksummed address
-    return ethers.getAddress(address.toLowerCase());
+    return ethers.getAddress(address); // validates and returns checksummed address
   } catch (error) {
-    throw new ApiError(400, 'INVALID_ADDRESS', 'Invalid Ethereum address format');
+    throw ApiError.badRequest('Invalid Ethereum address format');
   }
 }
 
@@ -43,14 +43,14 @@ export function isValidAddress(address: string): boolean {
  */
 export function validateBlockRange(fromBlock?: number, toBlock?: number): void {
   if (fromBlock !== undefined && fromBlock < 0) {
-    throw new ApiError(400, 'INVALID_FROM_BLOCK', 'fromBlock must be non-negative');
+    throw ApiError.badRequest('fromBlock must be non-negative');
   }
-  
+
   if (toBlock !== undefined && toBlock < 0) {
-    throw new ApiError(400, 'INVALID_TO_BLOCK', 'toBlock must be non-negative');
+    throw ApiError.badRequest('toBlock must be non-negative');
   }
-  
+
   if (fromBlock !== undefined && toBlock !== undefined && fromBlock > toBlock) {
-    throw new ApiError(400, 'INVALID_BLOCK_RANGE', 'fromBlock cannot be greater than toBlock');
+    throw ApiError.badRequest('fromBlock cannot be greater than toBlock');
   }
 }

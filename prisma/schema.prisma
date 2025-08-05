@@ -106,3 +106,21 @@ model Balance {
   @@index([address, blockNumber], name: "idx_balance_address_block")
   @@map("balances")
 }
+
+/**
+ * ------------------------------------------------
+ * AddressInfo model - Store contract detection results
+ * ------------------------------------------------
+ */
+model AddressInfo {
+  id            Int      @id @default(autoincrement())
+  address       String   @unique @db.VarChar(42) // Ethereum address (0x + 40 chars)
+  isContract    Boolean  @map("is_contract") // Whether the address is a contract
+  creationBlock BigInt?  @map("creation_block") // Block number where contract was created (null for EOAs)
+  detectedAt    DateTime @default(now()) @map("detected_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([address], name: "idx_address_info_address")
+  @@index([isContract], name: "idx_address_info_is_contract")
+  @@map("address_info")
+}

@@ -56,10 +56,11 @@ const EnvSchema = z.object({
   BLOCKCHAIN_SYNC_THRESHOLD: z.coerce.number().default(2000),
   BLOCKCHAIN_MAX_CONCURRENT: z.coerce.number().default(3),
   
-  // Caching
-  BALANCE_CACHE_TTL: z.coerce.number().default(30),
-  TX_QUERY_CACHE_TTL: z.coerce.number().default(300),
-  TRANSACTION_COUNT_CACHE_TTL: z.coerce.number().default(300), // 5 minutes default
+  // Caching TTL settings (in seconds)
+  BALANCE_CACHE_TTL: z.coerce.number().default(30), // 30 seconds
+  TX_QUERY_CACHE_TTL: z.coerce.number().default(300), // 5 minutes
+  TRANSACTION_COUNT_CACHE_TTL: z.coerce.number().default(300), // 5 minutes
+  ADDRESS_INFO_CACHE_TTL: z.coerce.number().default(604800), // 7 days
   
   // RPC settings
   RPC_TIMEOUT: z.coerce.number().default(10000),

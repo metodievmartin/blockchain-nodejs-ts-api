@@ -55,6 +55,7 @@ const appConfig = {
     balanceCacheTtl: env.BALANCE_CACHE_TTL,
     txQueryCacheTtl: env.TX_QUERY_CACHE_TTL,
     transactionCountCacheTtl: env.TRANSACTION_COUNT_CACHE_TTL,
+    addressInfoCacheTtl: env.ADDRESS_INFO_CACHE_TTL,
     
     // RPC settings
     rpcTimeout: env.RPC_TIMEOUT,

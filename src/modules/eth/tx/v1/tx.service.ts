@@ -24,6 +24,14 @@ import {
   validateBlockRange,
 } from '../../shared/address-validator';
 import {
+  detectAddressInfo,
+  type AddressInfo,
+} from '../../shared/contract-detector';
+import {
+  getCachedAddressInfo,
+  setCachedAddressInfo,
+} from '../../shared/cache.service';
+import {
   mapDBTransactionToAPI,
   mapEtherscanTransactionToAPI,
   mapEtherscanTransactionToDB,
@@ -38,6 +46,10 @@ import {
 } from '../../shared/cache.service';
 import { processGapsInBackground } from '../../shared/background-processor';
 import logger from '../../../../config/logger';
+import {
+  getAddressInfoFromDB,
+  saveAddressInfoToDB,
+} from '../../shared/address-info.repository';
 
 /**
  * Get paginated transactions for an address
@@ -84,9 +96,8 @@ export async function getTransactions(
   const etherscanProvider = getEtherscanProvider();
 
   // Determine actual block range
-  const latestBlock = await provider.getBlockNumber();
-  const actualFrom = fromBlock ?? 0;
-  const actualTo = toBlock ?? latestBlock;
+  const actualFrom = fromBlock ?? (await getStartingBlock(normalizedAddress));
+  const actualTo = toBlock ?? (await provider.getBlockNumber());
 
   logger.info('Processing paginated transaction request', {
     address: normalizedAddress,
@@ -678,4 +689,58 @@ export async function processTransactionGap(
     });
     throw error;
   }
+}
+
+/**
+ * Get starting block for an address
+ * @param address - Ethereum address
+ * @returns Starting block number
+ */
+export async function getStartingBlock(address: string): Promise<number> {
+  // 1. Try cache first
+  const cachedAddressInfo = await getCachedAddressInfo(address);
+  if (cachedAddressInfo) {
+    logger.debug('Using cached address info', {
+      address,
+    });
+    return getStartingBlockFromInfo(cachedAddressInfo);
+  }
+
+  // 2. Try the database
+  const storedAddressInfo = await getAddressInfoFromDB(address);
+  if (storedAddressInfo) {
+    logger.debug('Using stored address info from database', {
+      address,
+    });
+
+    // Populate Redis cache from database
+    await setCachedAddressInfo(address, storedAddressInfo);
+
+    return getStartingBlockFromInfo(storedAddressInfo);
+  }
+
+  // 3. Find the address info scanning the blockchain
+  const addressInfo = await detectAddressInfo(address);
+
+  await Promise.all([
+    // Save to the database
+    saveAddressInfoToDB(address, addressInfo),
+    // Cache the result
+    setCachedAddressInfo(address, addressInfo),
+  ]);
+
+  return getStartingBlockFromInfo(addressInfo);
+}
+
+/**
+ * Gets the appropriate starting block from address info
+ * @param addressInfo - The address info object
+ * @returns Starting block number
+ */
+function getStartingBlockFromInfo(addressInfo: AddressInfo): number {
+  if (addressInfo.isContract && addressInfo.creationBlock !== undefined) {
+    return addressInfo.creationBlock;
+  }
+
+  return 0; // EOA or fallback
 }

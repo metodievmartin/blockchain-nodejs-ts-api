@@ -3,7 +3,6 @@
  * ---------------------------------
  * HTTP request handlers for blockchain endpoints
  */
-import { z } from 'zod';
 import { Request, Response } from 'express';
 
 import { type AsyncValidatedRequestHandler } from '../../../../types/request.types';
@@ -11,12 +10,11 @@ import { type AsyncValidatedRequestHandler } from '../../../../types/request.typ
 import {
   AddressParams,
   GetCoverageResponse,
-  GetTransactionsQuerySchema,
+  GetTransactionsQuery,
   GetTransactionsResponse,
 } from './tx.dto';
 import * as txService from './tx.service';
 import logger from '../../../../config/logger';
-import { ApiError } from '../../../../utils/api.error';
 import { getQueueStats } from '../../../../queue/client';
 import { catchAsync } from '../../../../utils/catch-async';
 
@@ -25,20 +23,11 @@ import { catchAsync } from '../../../../utils/catch-async';
  * GET /api/v1/eth/address/:address/transactions?from=123&to=456&page=1&limit=1000&order=asc
  */
 const getTransactionsHandler: AsyncValidatedRequestHandler<
-  AddressParams
+  AddressParams,
+  GetTransactionsQuery
 > = async (req, res) => {
   const { address } = res.locals.validatedParams; // Validated and transformed to checksum
-
-  // Validate query parameters
-  const queryResult = GetTransactionsQuerySchema.safeParse(req.query);
-  if (!queryResult.success) {
-    throw ApiError.badRequest(
-      'Invalid query parameters',
-      z.flattenError(queryResult.error)
-    );
-  }
-
-  const query = queryResult.data;
+  const query = res.locals.validatedQuery;
 
   logger.info('Paginated transaction request received', {
     address,

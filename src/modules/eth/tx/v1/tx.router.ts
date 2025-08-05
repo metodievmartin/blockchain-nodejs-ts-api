@@ -5,9 +5,9 @@
  */
 import { Router } from 'express';
 
-import { AddressParamsSchema } from './tx.dto';
+import { AddressParamsSchema, GetTransactionsQuerySchema } from './tx.dto';
 import * as txController from './tx.controller';
-import { validateParams } from '../../../../middlewares/validate.middleware';
+import { validateParams, validateQuery } from '../../../../middlewares/validate.middleware';
 
 const router = Router();
 
@@ -15,6 +15,7 @@ const router = Router();
 router.get(
   '/:address/transactions',
   validateParams(AddressParamsSchema),
+  validateQuery(GetTransactionsQuerySchema),
   txController.getTransactions
 );
 router.get(

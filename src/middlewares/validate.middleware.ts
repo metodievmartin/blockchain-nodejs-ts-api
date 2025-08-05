@@ -58,3 +58,30 @@ export const validateParams = <T extends z.ZodSchema>(schema: T) => {
     next();
   };
 };
+
+/**
+ * Generic validation middleware that validates request query against a Zod schema
+ * @param schema - The Zod schema to validate against
+ * @returns Express middleware function
+ */
+export const validateQuery = <T extends z.ZodSchema>(schema: T) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.query) {
+      throw ApiError.badRequest('Request query is missing');
+    }
+
+    const validationResult = schema.safeParse(req.query);
+
+    if (!validationResult.success) {
+      const flattened = z.flattenError(validationResult.error);
+      throw ApiError.badRequest(
+        'Invalid query parameters — please check your input',
+        flattened.fieldErrors
+      );
+    }
+
+    // Store validated and transformed data in res.locals for controllers to access
+    res.locals.validatedQuery = validationResult.data as z.infer<T>;
+    next();
+  };
+};

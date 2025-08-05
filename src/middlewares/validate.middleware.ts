@@ -26,8 +26,8 @@ export const validateBody = <T extends z.ZodSchema>(schema: T) => {
       );
     }
 
-    // Attach validated data back to the body with proper typing
-    req.body = validationResult.data as z.infer<T>;
+    // Store validated and transformed data in res.locals for controllers to access
+    res.locals.validatedBody = validationResult.data as z.infer<T>;
     next();
   };
 };

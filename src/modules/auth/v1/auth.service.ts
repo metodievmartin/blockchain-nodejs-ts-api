@@ -1,28 +1,24 @@
-import * as jwtRepository from '../../shared/jwt.repository';
-import { ApiError } from '../../../utils/api.error';
-import * as userRepository from '../../users/v1/user.repository';
-import { hashPassword, comparePasswords } from '../../shared/auth';
 import {
+  LoginRequestBody,
+  LoginResponse,
+  RegisterRequestBody,
+  RegisterResponse,
+} from './auth.dto';
+import {
+  type DecodedToken,
+  calculateRefreshTokenExpiry,
+  getAccessTokenExpiry,
   signAccessToken,
   signRefreshToken,
   verifyToken,
-  calculateRefreshTokenExpiry,
-  type DecodedToken,
-  getAccessTokenExpiry,
 } from '../../shared/jwt';
-import {
-  RegisterRequestBody,
-  RegisterResponse,
-  LoginRequestBody,
-  LoginResponse,
-} from './auth.dto';
 import appConfig from '../../../config/app.config';
-import {
-  isSessionRevoked,
-  revokeSession,
-  revokeSessions,
-} from '../../shared/session.repository';
+import { ApiError } from '../../../utils/api.error';
 import { withTransaction } from '../../../config/db';
+import * as jwtRepository from '../../shared/jwt.repository';
+import * as userRepository from '../../users/v1/user.repository';
+import { comparePasswords, hashPassword } from '../../shared/auth';
+import * as sessionRepository from '../../shared/session.repository';
 
 // Error messages
 const ERRORS = {
@@ -117,7 +113,7 @@ async function _createNewSession(userId: string): Promise<{
       await jwtRepository.revokeRefreshToken(oldestSession.tokenId, tx);
 
       // Revoke the session in Redis
-      await revokeSession(oldestSession.tokenId);
+      await sessionRepository.revokeSession(oldestSession.tokenId);
     }
 
     // Create the new refresh token
@@ -156,7 +152,7 @@ export async function verifyAccessToken(
   }
 
   // Check if the session to which this token belongs is revoked
-  const isRevoked = await isSessionRevoked(decoded.sid);
+  const isRevoked = await sessionRepository.isSessionRevoked(decoded.sid);
 
   if (isRevoked) {
     throw ApiError.unauthorized(ERRORS.INVALID_ACCESS_TOKEN);
@@ -256,7 +252,7 @@ export async function logoutUser(refreshToken: string): Promise<void> {
 
   // Revoke the token
   await jwtRepository.revokeRefreshToken(decodedToken.jti);
-  await revokeSession(decodedToken.jti);
+  await sessionRepository.revokeSession(decodedToken.jti);
 }
 
 /**
@@ -273,6 +269,6 @@ export async function logoutUserFromAllSessions(userId: string): Promise<void> {
 
   // Revoke all sessions in Redis
   if (sessionIds.length > 0) {
-    await revokeSessions(sessionIds);
+    await sessionRepository.revokeSessions(sessionIds);
   }
 }

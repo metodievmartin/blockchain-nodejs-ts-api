@@ -145,32 +145,7 @@ export interface BalanceResponse {
   source: 'cache' | 'provider' | 'database'; // Data source
 }
 
-export interface CoverageRange {
-  fromBlock: number;
-  toBlock: number;
-  createdAt: string;
-}
 
-export interface GetCoverageResponse {
-  success: true;
-  data: {
-    address: string;
-    ranges: CoverageRange[];
-    totalBlocks: number;
-  };
-}
-
-/**
- * Error response DTO
- */
-export interface ErrorResponse {
-  success: false;
-  error: {
-    message: string;
-    code?: string;
-    details?: any;
-  };
-}
 
 /**
  * Internal service types

@@ -24,11 +24,6 @@ router.get(
   txController.getBalance
 );
 router.get(
-  '/:address/coverage',
-  validateParams(AddressParamsSchema),
-  txController.getAddressCoverage
-);
-router.get(
   '/:address/count',
   validateParams(AddressParamsSchema),
   txController.getStoredTransactionCount

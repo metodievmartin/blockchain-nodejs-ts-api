@@ -6,7 +6,6 @@
 import { ethers } from 'ethers';
 
 import {
-  CoverageRange,
   TransactionResponse,
   GetTransactionsResult,
   EtherscanTransaction,
@@ -14,7 +13,6 @@ import {
 import { GapProcessingProgress } from '../../../../types/processing.types';
 
 import {
-  getAllCoverageRanges,
   getCoverageRanges,
   getExistingTransactionsPaginated,
   getStoredBalance,
@@ -81,12 +79,6 @@ async function fetchTransactionsFromDatabase(
     incomplete?: boolean;
   } = {}
 ): Promise<GetTransactionsResult> {
-  logger.info('Serving from database (no gaps)', {
-    address: normalizedAddress,
-    page,
-    limit,
-  });
-
   const dbTransactions = await getExistingTransactionsPaginated(
     normalizedAddress,
     actualFrom,
@@ -134,13 +126,6 @@ async function fetchTransactionsFromEtherscan(
   order: 'asc' | 'desc',
   gaps: any[]
 ): Promise<GetTransactionsResult> {
-  logger.info('Gaps detected, fetching from Etherscan', {
-    address: normalizedAddress,
-    gaps: gaps.length,
-    page,
-    limit,
-  });
-
   const etherscanProvider = getEtherscanProvider();
 
   try {
@@ -175,7 +160,7 @@ async function fetchTransactionsFromEtherscan(
       },
     };
 
-    logger.info('Returned Etherscan result', {
+    logger.debug('Returned Etherscan result', {
       address: normalizedAddress,
       page,
       limit,
@@ -281,6 +266,14 @@ export async function getTransactions(
 
   if (!hasGaps) {
     // No gaps - serve from the database
+    logger.info('Serving from database (complete coverage)', {
+      address: normalizedAddress,
+      fromBlock: actualFrom,
+      toBlock: actualTo,
+      page,
+      limit,
+    });
+
     const result = await fetchTransactionsFromDatabase(
       normalizedAddress,
       actualFrom,
@@ -303,6 +296,13 @@ export async function getTransactions(
 
     return result;
   }
+
+  logger.info('Gaps detected, fetching from Etherscan', {
+    address: normalizedAddress,
+    gaps: gaps.length,
+    page,
+    limit,
+  });
 
   // Gaps exist - fetch from Etherscan for immediate response
   const result = await fetchTransactionsFromEtherscan(
@@ -328,6 +328,15 @@ export async function getTransactions(
 
   // Start background processing to fill the database (non-blocking)
   setImmediate(() => {
+    logger.info('Starting background gap processing', {
+      address: normalizedAddress,
+      gapsCount: gaps.length,
+      totalBlocks: gaps.reduce(
+        (sum, gap) => sum + (gap.toBlock - gap.fromBlock + 1),
+        0
+      ),
+    });
+
     processGapsInBackground(normalizedAddress, gaps).catch((error) => {
       logger.error('Background gap processing failed', {
         address: normalizedAddress,
@@ -361,7 +370,7 @@ export async function getBalance(address: string): Promise<{
 }> {
   const startTime = performance.now();
   const normalizedAddress = validateAndNormalizeAddress(address);
-  logger.debug('Processing balance request', { address: normalizedAddress });
+  logger.info('Processing balance request', { address: normalizedAddress });
 
   // Try cache first
   const cached = await getCachedBalance(normalizedAddress);
@@ -493,7 +502,7 @@ export async function getStoredTransactionCount(
   const startTime = performance.now();
   const normalizedAddress = validateAndNormalizeAddress(address);
 
-  logger.debug('Processing transaction count request', {
+  logger.info('Processing transaction count request', {
     address: normalizedAddress,
   });
 
@@ -522,35 +531,6 @@ export async function getStoredTransactionCount(
   });
 
   return count;
-}
-
-/**
- * Get coverage information for an address
- * @param address - Ethereum address
- * @returns Coverage ranges and statistics
- */
-export async function getAddressCoverage(address: string): Promise<{
-  address: string;
-  ranges: CoverageRange[];
-  totalBlocks: number;
-}> {
-  const normalizedAddress = validateAndNormalizeAddress(address);
-  const ranges = await getAllCoverageRanges(normalizedAddress);
-
-  const totalBlocks = ranges.reduce(
-    (sum, range) => sum + (range.toBlock - range.fromBlock + 1),
-    0
-  );
-
-  return {
-    address: normalizedAddress,
-    ranges: ranges.map((range) => ({
-      fromBlock: range.fromBlock,
-      toBlock: range.toBlock,
-      createdAt: range.createdAt.toISOString(),
-    })),
-    totalBlocks,
-  };
 }
 
 /**
@@ -754,8 +734,10 @@ export async function resolveStartingBlock(address: string): Promise<number> {
   // 1. Try cache first
   const cachedAddressInfo = await getCachedAddressInfo(address);
   if (cachedAddressInfo) {
-    logger.debug('Using cached address info', {
+    logger.debug('Address info cache hit', {
       address,
+      isContract: cachedAddressInfo.isContract,
+      creationBlock: cachedAddressInfo.creationBlock,
     });
     return getStartingBlockFromInfo(cachedAddressInfo);
   }
@@ -763,8 +745,10 @@ export async function resolveStartingBlock(address: string): Promise<number> {
   // 2. Try the database
   const storedAddressInfo = await getAddressInfoFromDB(address);
   if (storedAddressInfo) {
-    logger.debug('Using stored address info from database', {
+    logger.debug('Address info found in database', {
       address,
+      isContract: storedAddressInfo.isContract,
+      creationBlock: storedAddressInfo.creationBlock,
     });
 
     // Populate Redis cache from database
@@ -774,6 +758,10 @@ export async function resolveStartingBlock(address: string): Promise<number> {
   }
 
   // 3. Find the address info scanning the blockchain
+  logger.info('Discovering address info via blockchain scan', {
+    address,
+  });
+
   const addressInfo = await discoverAddressInfo(address);
 
   await Promise.all([
@@ -782,6 +770,12 @@ export async function resolveStartingBlock(address: string): Promise<number> {
     // Cache the result
     setCachedAddressInfo(address, addressInfo),
   ]);
+
+  logger.info('Address info discovered and cached', {
+    address,
+    isContract: addressInfo.isContract,
+    creationBlock: addressInfo.creationBlock,
+  });
 
   return getStartingBlockFromInfo(addressInfo);
 }

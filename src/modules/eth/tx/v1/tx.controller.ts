@@ -9,7 +9,6 @@ import { type AsyncValidatedRequestHandler } from '../../../../types/request.typ
 
 import {
   AddressParams,
-  GetCoverageResponse,
   GetTransactionsQuery,
   GetTransactionsResponse,
 } from './tx.dto';
@@ -78,31 +77,6 @@ const getBalanceHandler: AsyncValidatedRequestHandler<AddressParams> = async (
 };
 
 /**
- * Get address coverage
- * GET /api/v1/eth/address/:address/coverage
- */
-const getAddressCoverageHandler: AsyncValidatedRequestHandler<
-  AddressParams
-> = async (req, res) => {
-  const { address } = res.locals.validatedParams; // Validated and transformed to checksum
-
-  logger.info('Coverage request received', {
-    address,
-    ip: req.ip,
-    userAgent: req.get('User-Agent'),
-  });
-
-  const result = await txService.getAddressCoverage(address);
-
-  const response: GetCoverageResponse = {
-    success: true,
-    data: result,
-  };
-
-  res.json(response);
-};
-
-/**
  * Get stored transaction count for an address
  * GET /api/v1/eth/address/:address/count
  */
@@ -135,5 +109,4 @@ export const getTransactions = catchAsync(getTransactionsHandler);
 export const getStoredTransactionCount = catchAsync(
   getStoredTransactionCountHandler
 );
-export const getAddressCoverage = catchAsync(getAddressCoverageHandler);
 export const getBalance = catchAsync(getBalanceHandler);

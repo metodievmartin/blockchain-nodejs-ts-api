@@ -1,13 +1,13 @@
 /**
  * ---------------------------------
- * Ethereum Provider Utilities
+ * Ethereum Provider Configuration
  * ---------------------------------
  * Singleton providers for Ethereum JSON-RPC and Etherscan API interactions
  */
 
+import logger from './logger';
 import { ethers } from 'ethers';
-import appConfig from '../../../config/app.config';
-import logger from '../../../config/logger';
+import appConfig from './app.config';
 
 let provider: ethers.JsonRpcProvider | null = null;
 let etherscanProvider: ethers.EtherscanProvider | null = null;
@@ -52,37 +52,11 @@ export function getEtherscanProvider(): ethers.EtherscanProvider {
     logger.info('Etherscan provider initialized', {
       network: 'sepolia',
     });
+
+    etherscanProvider;
   }
 
   return etherscanProvider;
-}
-
-/**
- * Get block number when address was created
- * @param address - Ethereum address
- * @returns Block number when address was created
- */
-export async function getAddressCreationBlock(
-  address: string
-): Promise<number> {
-  try {
-    const provider = getEthereumProvider();
-    const code = await provider.getCode(address);
-
-    // If it's an EOA (no code), start from block 0
-    if (code === '0x') {
-      return 0;
-    }
-
-    // For contracts, we could implement binary search to find creation block
-    // For now, return 0 as a simple implementation
-    // TODO: Implement binary search for contract creation block detection
-    logger.info('Contract detected, using block 0 as start', { address });
-    return 0;
-  } catch (error) {
-    logger.error('Error getting address creation block', { address, error });
-    return 0; // Fallback to block 0
-  }
 }
 
 /**
@@ -92,11 +66,13 @@ export async function getAddressCreationBlock(
 export async function testProviderConnection(): Promise<boolean> {
   try {
     const provider = getEthereumProvider();
-    const blockNumber = await provider.getBlockNumber();
-    logger.info('Provider connection test successful', { blockNumber });
+    await provider.getBlockNumber();
+    logger.info('Provider connection test successful');
     return true;
   } catch (error) {
-    logger.error('Provider connection test failed', { error });
+    logger.error('Provider connection test failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return false;
   }
 }

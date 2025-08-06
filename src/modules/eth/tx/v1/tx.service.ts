@@ -6,9 +6,10 @@
 import { ethers } from 'ethers';
 
 import {
-  TransactionResponse,
-  GetTransactionsResult,
+  MappedTransaction,
+  GetTransactionsResponse,
   EtherscanTransaction,
+  GetBalanceResponse,
 } from './tx.dto';
 import { GapProcessingProgress } from '../../../../types/processing.types';
 
@@ -23,7 +24,7 @@ import {
 import {
   getEthereumProvider,
   getEtherscanProvider,
-} from '../../shared/provider';
+} from '../../../../config/providers';
 import {
   getCachedAddressInfo,
   getCachedBalance,
@@ -33,27 +34,24 @@ import {
   setCachedBalance,
   setCachedPaginatedTransactionQuery,
   setCachedTransactionCount,
-} from '../../shared/cache.service';
+} from '../../../../core/cache/cache.service';
 import {
   validateAndNormalizeAddress,
   validateBlockRange,
-} from '../../shared/address-validator';
-import {
-  discoverAddressInfo,
-  type AddressInfo,
-} from '../../shared/contract-detector';
+} from '../../utils/address-validator';
 import {
   mapDBTransactionToAPI,
   mapEtherscanTransactionToAPI,
   mapEtherscanTransactionToDB,
-} from '../../shared/transaction-mapper';
+} from '../../utils/transaction-mapper';
 import {
   getAddressInfoFromDB,
   saveAddressInfoToDB,
-} from '../../shared/address-info.repository';
+} from '../../core/address-info.repository';
 import logger from '../../../../config/logger';
-import { findGapsInCoverage } from '../../shared/gap-finder';
-import { processGapsInBackground } from '../../shared/background-processor';
+import { findGapsInCoverage } from '../../core/gap-finder';
+import { processGapsInBackground } from '../../core/background-processor';
+import { AddressInfo, discoverAddressInfo } from '../../core/contract-detector';
 
 /**
  * Configuration constants
@@ -78,7 +76,7 @@ async function fetchTransactionsFromDatabase(
   options: {
     incomplete?: boolean;
   } = {}
-): Promise<GetTransactionsResult> {
+): Promise<GetTransactionsResponse> {
   const dbTransactions = await getExistingTransactionsPaginated(
     normalizedAddress,
     actualFrom,
@@ -91,7 +89,7 @@ async function fetchTransactionsFromDatabase(
   const transactions = dbTransactions.map(mapDBTransactionToAPI);
   const hasMore = transactions.length === limit;
 
-  const metadata: GetTransactionsResult['metadata'] = {
+  const metadata: GetTransactionsResponse['metadata'] = {
     address: normalizedAddress,
     fromBlock: actualFrom,
     toBlock: actualTo,
@@ -125,7 +123,7 @@ async function fetchTransactionsFromEtherscan(
   limit: number,
   order: 'asc' | 'desc',
   gaps: any[]
-): Promise<GetTransactionsResult> {
+): Promise<GetTransactionsResponse> {
   const etherscanProvider = getEtherscanProvider();
 
   try {
@@ -138,11 +136,17 @@ async function fetchTransactionsFromEtherscan(
       page: page,
       sort: order,
     };
+
+    logger.debug('Fetching transactions from Etherscan', {
+      address: normalizedAddress,
+      params,
+    });
+    
     const etherscanTxs = await etherscanProvider.fetch('account', params);
     const transactions = etherscanTxs || [];
     const hasMore = transactions.length === limit;
 
-    const result: GetTransactionsResult = {
+    const result: GetTransactionsResponse = {
       transactions: transactions.map((tx: EtherscanTransaction) =>
         mapEtherscanTransactionToAPI(tx, normalizedAddress)
       ),
@@ -207,7 +211,7 @@ export async function getTransactions(
   page: number = TX_SERVICE_CONFIG.DEFAULT_PAGE,
   limit: number = TX_SERVICE_CONFIG.DEFAULT_LIMIT,
   order: 'asc' | 'desc' = 'asc'
-): Promise<GetTransactionsResult> {
+): Promise<GetTransactionsResponse> {
   const startTime = performance.now();
 
   // Validate and normalize inputs
@@ -358,16 +362,7 @@ export async function getTransactions(
  * @param address - Ethereum address
  * @returns Balance information with ETH and wei values
  */
-export async function getBalance(address: string): Promise<{
-  address: string;
-  balance: string; // ETH as string (human-readable)
-  balanceWei: string; // Wei as string (precise)
-  blockNumber: number;
-  lastUpdated: string; // ISO timestamp
-  cached: boolean;
-  cacheAge?: number;
-  source: 'cache' | 'provider' | 'database';
-}> {
+export async function getBalance(address: string): Promise<GetBalanceResponse> {
   const startTime = performance.now();
   const normalizedAddress = validateAndNormalizeAddress(address);
   logger.info('Processing balance request', { address: normalizedAddress });
@@ -390,7 +385,7 @@ export async function getBalance(address: string): Promise<{
       balanceWei: cached.balance,
       blockNumber: cached.blockNumber,
       lastUpdated: new Date(cached.cachedAt).toISOString(),
-      cached: true,
+      fromCache: true,
       cacheAge,
       source: 'cache',
     };
@@ -434,7 +429,7 @@ export async function getBalance(address: string): Promise<{
       balanceWei,
       blockNumber,
       lastUpdated,
-      cached: false,
+      fromCache: false,
       source: 'provider',
     };
   } catch (providerError) {
@@ -466,7 +461,7 @@ export async function getBalance(address: string): Promise<{
           balanceWei: storedBalance.balance,
           blockNumber: Number(storedBalance.blockNumber),
           lastUpdated: storedBalance.updatedAt.toISOString(),
-          cached: false,
+          fromCache: false,
           source: 'database',
         };
       }
@@ -494,11 +489,14 @@ export async function getBalance(address: string): Promise<{
 /**
  * Get transaction count for an address with Redis caching
  * @param address - Ethereum address
- * @returns Number of transactions stored
+ * @returns Transaction count with metadata
  */
-export async function getStoredTransactionCount(
-  address: string
-): Promise<number> {
+export async function getStoredTransactionCount(address: string): Promise<{
+  address: string;
+  count: number;
+  fromCache: boolean;
+  source: 'cache' | 'database';
+}> {
   const startTime = performance.now();
   const normalizedAddress = validateAndNormalizeAddress(address);
 
@@ -515,10 +513,15 @@ export async function getStoredTransactionCount(
       responseTime: performance.now() - startTime,
     });
 
-    return cached;
+    return {
+      address: normalizedAddress,
+      count: cached,
+      fromCache: true,
+      source: 'cache',
+    };
   }
 
-  // Get from database
+  // Fetch from database
   const count = await getTransactionCount(normalizedAddress);
 
   // Cache the result (5 minutes TTL since transaction counts change relatively frequently)
@@ -530,7 +533,12 @@ export async function getStoredTransactionCount(
     responseTime: performance.now() - startTime,
   });
 
-  return count;
+  return {
+    address: normalizedAddress,
+    count,
+    fromCache: false,
+    source: 'database',
+  };
 }
 
 /**
@@ -568,7 +576,7 @@ export async function processTransactionGap(
   });
 
   try {
-    const allTransactions: TransactionResponse[] = [];
+    const allTransactions: MappedTransaction[] = [];
     let currentStartBlock = fromBlock;
     let currentEndBlock = toBlock;
     let iterationCount = 0;

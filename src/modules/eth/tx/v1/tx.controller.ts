@@ -10,12 +10,14 @@ import { type AsyncValidatedRequestHandler } from '../../../../types/request.typ
 import {
   AddressParams,
   GetTransactionsQuery,
+  GetStoredTransactionCountResponse,
+  GetBalanceResponse,
   GetTransactionsResponse,
 } from './tx.dto';
 import * as txService from './tx.service';
 import logger from '../../../../config/logger';
+import { catchAsync } from '../../../../lib/async';
 import { getQueueStats } from '../../../../queue/client';
-import { catchAsync } from '../../../../utils/catch-async';
 
 /**
  * Get transactions for an address
@@ -45,7 +47,6 @@ const getTransactionsHandler: AsyncValidatedRequestHandler<
   );
 
   const response: GetTransactionsResponse = {
-    success: true,
     fromCache: result.fromCache,
     transactions: result.transactions,
     pagination: result.pagination,
@@ -71,7 +72,7 @@ const getBalanceHandler: AsyncValidatedRequestHandler<AddressParams> = async (
     userAgent: req.get('User-Agent'),
   });
 
-  const result = await txService.getBalance(address);
+  const result: GetBalanceResponse = await txService.getBalance(address);
 
   res.json(result);
 };
@@ -91,11 +92,10 @@ const getStoredTransactionCountHandler: AsyncValidatedRequestHandler<
     userAgent: req.get('User-Agent'),
   });
 
-  const count = await txService.getStoredTransactionCount(address);
+  const count: GetStoredTransactionCountResponse =
+    await txService.getStoredTransactionCount(address);
 
-  res.json({
-    count,
-  });
+  res.json(count);
 };
 
 export const getQueueInfo = catchAsync(async (req: Request, res: Response) => {

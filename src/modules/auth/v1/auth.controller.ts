@@ -7,7 +7,7 @@ import type {
 import { type AsyncValidatedRequestHandler } from '../../../types/request.types';
 
 import * as authService from './auth.service';
-import { catchAsync } from '../../../utils/catch-async';
+import { catchAsync } from '../../../lib/async';
 
 /**
  * Register a new user

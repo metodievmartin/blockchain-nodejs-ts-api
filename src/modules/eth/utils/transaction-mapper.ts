@@ -5,32 +5,6 @@
  * Maps transactions between different formats (ethers.js, Etherscan API, DB, API response)
  */
 
-import { ethers } from 'ethers';
-
-/**
- * Maps an ethers.js transaction to database format
- * @param tx - Ethers transaction object
- * @param address - Address being queried (for indexing)
- * @returns Transaction in database format
- */
-export function mapEthersTransactionToDB(tx: any, address: string) {
-  return {
-    hash: tx.hash,
-    address: address.toLowerCase(),
-    blockNumber: BigInt(tx.blockNumber?.toString() || '0'),
-    from: tx.from?.toLowerCase() || '',
-    to: tx.to?.toLowerCase() || null,
-    value: tx.value?.toString() || '0',
-    gasPrice: tx.gasPrice?.toString() || '0',
-    gasUsed: tx.gasLimit ? BigInt(tx.gasLimit.toString()) : null, // Note: gasLimit from pending tx
-    gas: tx.gasLimit ? BigInt(tx.gasLimit.toString()) : null,
-    functionName: tx.data && tx.data !== '0x' ? tx.data.slice(0, 10) : null, // First 4 bytes of data
-    txreceiptStatus: '1', // Assume success for ethers transactions
-    contractAddress: null, // Not available in basic ethers tx
-    timestamp: new Date(), // Will be updated when we get block info
-  };
-}
-
 /**
  * Maps an Etherscan API transaction to database format
  * @param tx - Etherscan transaction object

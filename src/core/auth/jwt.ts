@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import { v4 as uuidV4 } from 'uuid';
 
 import appConfig from '../../config/app.config';
-import { JwtTokenError } from '../../utils/jwt-token.error';
+import { JwtTokenError } from '../../lib/errors';
 
 /**
  * Payload structure for JWT tokens

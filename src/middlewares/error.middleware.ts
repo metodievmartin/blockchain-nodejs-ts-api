@@ -3,8 +3,7 @@ import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
 import appConfig from '../config/app.config';
-import { ApiError } from '../utils/api.error';
-import { JwtTokenError } from '../utils/jwt-token.error';
+import { ApiError, JwtTokenError } from '../lib/errors';
 
 type ErrorResponse = {
   error: string;

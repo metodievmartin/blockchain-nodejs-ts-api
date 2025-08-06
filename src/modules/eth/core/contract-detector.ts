@@ -6,7 +6,7 @@
 import { ethers } from 'ethers';
 
 import logger from '../../../config/logger';
-import { getEthereumProvider } from './provider';
+import { getEthereumProvider } from '../../../config/providers';
 
 /**
  * Address info interface

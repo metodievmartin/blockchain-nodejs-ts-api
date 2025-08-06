@@ -7,8 +7,8 @@ import {
 import { type AsyncValidatedRequestHandler } from '../../../types/request.types';
 
 import * as userService from './user.service';
-import { ApiError } from '../../../utils/api.error';
-import { catchAsync } from '../../../utils/catch-async';
+import { ApiError } from '../../../lib/errors';
+import { catchAsync } from '../../../lib/async';
 
 /**
  * GET /users/me

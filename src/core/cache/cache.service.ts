@@ -3,9 +3,9 @@
  * ---------------------------------
  * Redis-based caching utilities for blockchain data
  */
-import { getOrCreateRedisClient } from '../../../config/redis';
-import appConfig from '../../../config/app.config';
-import logger from '../../../config/logger';
+import { getOrCreateRedisClient } from '../../config/redis';
+import appConfig from '../../config/app.config';
+import logger from '../../config/logger';
 
 const redis = getOrCreateRedisClient();
 

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Request, Response, NextFunction } from 'express';
 
-import { ApiError } from '../utils/api.error';
+import { ApiError } from '../lib/errors';
 
 /**
  * Generic validation middleware that validates request body against a Zod schema

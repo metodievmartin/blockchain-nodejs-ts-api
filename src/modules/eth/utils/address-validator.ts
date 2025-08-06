@@ -5,7 +5,7 @@
  */
 import { ethers } from 'ethers';
 
-import { ApiError } from '../../../utils/api.error';
+import { ApiError } from '../../../lib/errors';
 
 /**
  * Validates and normalises an Ethereum address

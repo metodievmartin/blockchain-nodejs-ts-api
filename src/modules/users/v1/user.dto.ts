@@ -8,7 +8,7 @@ import {
   INVALID_USERNAME_FORMAT_MESSAGE,
   STRONG_PASSWORD_PATTERN,
   INVALID_PASSWORD_FORMAT_MESSAGE,
-} from '../../../utils/zod.utils';
+} from '../../../lib/validation';
 
 /**
  * PublicUser type - only includes non-sensitive user properties

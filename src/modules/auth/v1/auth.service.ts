@@ -11,14 +11,22 @@ import {
   signAccessToken,
   signRefreshToken,
   verifyToken,
-} from '../../shared/jwt';
+} from '../../../core/auth/jwt';
+import {
+  createRefreshToken,
+  findRefreshTokenById,
+  revokeRefreshToken,
+  revokeAllUserRefreshTokens,
+  getActiveUserSessionsCount,
+  getOldestActiveUserSession,
+  getActiveUserRefreshTokens,
+} from '../../../core/auth/jwt.repository';
 import appConfig from '../../../config/app.config';
-import { ApiError } from '../../../utils/api.error';
+import { ApiError } from '../../../lib/errors';
 import { withTransaction } from '../../../config/db';
-import * as jwtRepository from '../../shared/jwt.repository';
 import * as userRepository from '../../users/v1/user.repository';
-import { comparePasswords, hashPassword } from '../../shared/auth';
-import * as sessionRepository from '../../shared/session.repository';
+import { comparePasswords, hashPassword } from '../../../core/auth/auth';
+import * as sessionRepository from '../../../core/auth/session.repository';
 
 // Error messages
 const ERRORS = {
@@ -49,7 +57,7 @@ async function _validateRefreshToken(
   }
 
   // Check if token exists in the database
-  const tokenRecord = await jwtRepository.findRefreshTokenById(decoded.jti);
+  const tokenRecord = await findRefreshTokenById(decoded.jti);
 
   if (!tokenRecord) {
     throw ApiError.unauthorized(ERRORS.INVALID_REFRESH_TOKEN);
@@ -93,31 +101,25 @@ async function _createNewSession(userId: string): Promise<{
   // Use transaction to handle session management
   await withTransaction(async (tx) => {
     // Count active sessions within the transaction
-    const activeSessionsCount = await jwtRepository.getActiveUserSessionsCount(
-      userId,
-      tx
-    );
+    const activeSessionsCount = await getActiveUserSessionsCount(userId, tx);
 
     // If the user has reached the maximum number of sessions, revoke the oldest one
     if (activeSessionsCount >= appConfig.jwt.maxSessionsPerUser) {
-      const oldestSession = await jwtRepository.getOldestActiveUserSession(
-        userId,
-        tx
-      );
+      const oldestSession = await getOldestActiveUserSession(userId, tx);
 
       if (!oldestSession) {
         // We should never get to this state so cancel the entire transaction
         throw new Error('Could not find oldest active session');
       }
 
-      await jwtRepository.revokeRefreshToken(oldestSession.tokenId, tx);
+      await revokeRefreshToken(oldestSession.tokenId, tx);
 
       // Revoke the session in Redis
       await sessionRepository.revokeSession(oldestSession.tokenId);
     }
 
     // Create the new refresh token
-    await jwtRepository.createRefreshToken(
+    await createRefreshToken(
       {
         tokenId: jti,
         userId,
@@ -251,7 +253,7 @@ export async function logoutUser(refreshToken: string): Promise<void> {
   const decodedToken = await _validateRefreshToken(refreshToken);
 
   // Revoke the token
-  await jwtRepository.revokeRefreshToken(decodedToken.jti);
+  await revokeRefreshToken(decodedToken.jti);
   await sessionRepository.revokeSession(decodedToken.jti);
 }
 
@@ -261,11 +263,11 @@ export async function logoutUser(refreshToken: string): Promise<void> {
  */
 export async function logoutUserFromAllSessions(userId: string): Promise<void> {
   // Get all active refresh tokens for the user to revoke their sessions
-  const activeTokens = await jwtRepository.getActiveUserRefreshTokens(userId);
+  const activeTokens = await getActiveUserRefreshTokens(userId);
   const sessionIds = activeTokens.map((token) => token.tokenId);
 
   // Revoke all refresh tokens in the database
-  await jwtRepository.revokeAllUserRefreshTokens(userId);
+  await revokeAllUserRefreshTokens(userId);
 
   // Revoke all sessions in Redis
   if (sessionIds.length > 0) {

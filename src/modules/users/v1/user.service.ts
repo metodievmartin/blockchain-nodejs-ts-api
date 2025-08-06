@@ -3,11 +3,11 @@ import {
   type UpdateUserProfileRequest,
   type ChangePasswordRequest,
 } from './user.dto';
-import { ApiError } from '../../../utils/api.error';
+import { ApiError } from '../../../lib/errors';
 import * as userRepository from './user.repository';
-import { comparePasswords, hashPassword } from '../../shared/auth';
-import { revokeSessions } from '../../shared/session.repository';
-import * as jwtRepository from '../../shared/jwt.repository';
+import { comparePasswords, hashPassword } from '../../../core/auth/auth';
+import { revokeSessions } from '../../../core/auth/session.repository';
+import * as jwtRepository from '../../../core/auth/jwt.repository';
 import { withTransaction } from '../../../config/db';
 
 /**

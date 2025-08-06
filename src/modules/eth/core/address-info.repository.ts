@@ -3,9 +3,9 @@
  * ---------------------------------
  * Database operations for address info persistence
  */
+import logger from '../../../config/logger';
 import { getOrCreateDB } from '../../../config/db';
 import { type AddressInfo } from './contract-detector';
-import logger from '../../../config/logger';
 
 const prisma = getOrCreateDB();
 
@@ -14,7 +14,9 @@ const prisma = getOrCreateDB();
  * @param address - Ethereum address (checksummed)
  * @returns AddressInfo or null if not found
  */
-export async function getAddressInfoFromDB(address: string): Promise<AddressInfo | null> {
+export async function getAddressInfoFromDB(
+  address: string
+): Promise<AddressInfo | null> {
   try {
     const result = await prisma.addressInfo.findUnique({
       where: { address: address.toLowerCase() },
@@ -26,7 +28,9 @@ export async function getAddressInfoFromDB(address: string): Promise<AddressInfo
 
     return {
       isContract: result.isContract,
-      creationBlock: result.creationBlock ? Number(result.creationBlock) : undefined,
+      creationBlock: result.creationBlock
+        ? Number(result.creationBlock)
+        : undefined,
     };
   } catch (error) {
     logger.error('Error getting address info from DB', {
@@ -51,13 +55,17 @@ export async function saveAddressInfoToDB(
       where: { address: address.toLowerCase() },
       update: {
         isContract: addressInfo.isContract,
-        creationBlock: addressInfo.creationBlock ? BigInt(addressInfo.creationBlock) : null,
+        creationBlock: addressInfo.creationBlock
+          ? BigInt(addressInfo.creationBlock)
+          : null,
         updatedAt: new Date(),
       },
       create: {
         address: address.toLowerCase(),
         isContract: addressInfo.isContract,
-        creationBlock: addressInfo.creationBlock ? BigInt(addressInfo.creationBlock) : null,
+        creationBlock: addressInfo.creationBlock
+          ? BigInt(addressInfo.creationBlock)
+          : null,
       },
     });
 

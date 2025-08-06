@@ -1,9 +1,10 @@
 import type { Request, Response, NextFunction } from 'express';
 
-import logger from '../config/logger';
-import { ApiError } from '../utils/api.error';
-import { catchAsync } from '../utils/catch-async';
 import { type PublicUser } from '../modules/users/v1/user.dto';
+
+import logger from '../config/logger';
+import { ApiError } from '../lib/errors';
+import { catchAsync } from '../lib/async';
 import { fetchPublicUser } from '../modules/users/v1/user.service';
 import { verifyAccessToken } from '../modules/auth/v1/auth.service';
 

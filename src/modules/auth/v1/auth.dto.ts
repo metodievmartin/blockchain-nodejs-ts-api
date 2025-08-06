@@ -5,7 +5,7 @@ import {
   usernameSchema,
   strongPasswordSchema,
 } from '../../users/v1/user.dto';
-import { requiredStringError } from '../../../utils/zod.utils';
+import { requiredStringError } from '../../../lib/validation';
 
 /**
  * Registration DTOs

@@ -1,4 +1,12 @@
 /**
+ * ---------------------------------
+ * Error Classes Library
+ * ---------------------------------
+ * Combined error classes for consistent error handling across the application
+ */
+import jwt from 'jsonwebtoken';
+
+/**
  * Custom error class for API errors with status codes
  * Used to throw errors that will be properly formatted in responses
  *
@@ -92,5 +100,23 @@ export class ApiError extends Error {
     details?: Record<string, unknown | null>
   ) {
     return new ApiError(500, 'Internal Server Error', message, details);
+  }
+}
+
+/**
+ * Custom error class for JWT token errors
+ *
+ * It's wrapping jwt.TokenExpiredError, jwt.NotBeforeError, and jwt.JsonWebTokenError
+ * and adding the token type
+ */
+export class JwtTokenError extends Error {
+  constructor(
+    public originalError:
+      | jwt.TokenExpiredError
+      | jwt.NotBeforeError
+      | jwt.JsonWebTokenError,
+    public tokenType: 'access' | 'refresh'
+  ) {
+    super(originalError.message);
   }
 }

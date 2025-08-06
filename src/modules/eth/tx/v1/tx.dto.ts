@@ -68,10 +68,28 @@ export interface EtherscanTransaction {
 }
 
 /**
+ * Response DTOs
+ */
+export interface MappedTransaction {
+  hash: string;
+  blockNumber: string; // BigInt converted to string for JSON
+  from: string;
+  to: string | null;
+  value: string;
+  gasPrice: string;
+  gasUsed: string | null;
+  gas: string | null; // Gas limit
+  functionName: string | null; // Function signature/name
+  status: string; // Transaction status (1 = success, 0 = failed)
+  contractAddress: string | null; // Contract address for contract creation
+  timestamp: string; // ISO string
+}
+
+/**
  * Complete transaction response structure for getTransactions
  */
-export interface GetTransactionsResult {
-  transactions: TransactionResponse[];
+export interface GetTransactionsResponse {
+  transactions: MappedTransaction[];
   fromCache: boolean;
   pagination: {
     page: number;
@@ -89,63 +107,28 @@ export interface GetTransactionsResult {
 }
 
 /**
- * Response DTOs
- */
-/**
- * Transaction response format
- */
-export interface TransactionResponse {
-  hash: string;
-  blockNumber: string; // BigInt converted to string for JSON
-  from: string;
-  to: string | null;
-  value: string;
-  gasPrice: string;
-  gasUsed: string | null;
-  gas: string | null; // Gas limit
-  functionName: string | null; // Function signature/name
-  status: string; // Transaction status (1 = success, 0 = failed)
-  contractAddress: string | null; // Contract address for contract creation
-  timestamp: string; // ISO string
-}
-
-/**
- * Response for getting transactions
- */
-export interface GetTransactionsResponse {
-  success: boolean;
-  transactions: TransactionResponse[];
-  fromCache: boolean;
-  pagination: {
-    page: number;
-    limit: number;
-    total?: number;
-    hasMore?: boolean;
-  };
-  metadata: {
-    address: string;
-    fromBlock?: number;
-    toBlock?: number;
-    source: 'database' | 'etherscan' | 'cache';
-    backgroundProcessing?: boolean;
-  };
-}
-
-/**
  * Response for getting balance
  */
-export interface BalanceResponse {
+export interface GetBalanceResponse {
   address: string;
   balance: string; // Balance in ETH as string (human-readable)
   balanceWei: string; // Balance in wei as string (precise)
   blockNumber: number;
   lastUpdated: string; // ISO timestamp when balance was last fetched/updated
-  cached: boolean;
+  fromCache: boolean;
   cacheAge?: number; // Cache age in milliseconds
   source: 'cache' | 'provider' | 'database'; // Data source
 }
 
-
+/**
+ * Response for getting stored transaction count
+ */
+export interface GetStoredTransactionCountResponse {
+  address: string;
+  count: number;
+  fromCache: boolean;
+  source: 'cache' | 'database';
+}
 
 /**
  * Internal service types
@@ -153,16 +136,4 @@ export interface BalanceResponse {
 export interface Gap {
   fromBlock: number;
   toBlock: number;
-}
-
-export interface ProcessingResult {
-  transactions: any[];
-  metadata: {
-    address: string;
-    fromBlock?: number;
-    toBlock?: number;
-    source: 'database' | 'etherscan' | 'cache';
-    cached: boolean;
-    backgroundProcessing?: boolean;
-  };
 }

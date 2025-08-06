@@ -60,6 +60,9 @@ const appConfig = {
     // RPC settings
     rpcTimeout: env.RPC_TIMEOUT,
     rpcRetryAttempts: env.RPC_RETRY_ATTEMPTS,
+    
+    // Etherscan API settings
+    etherscanTimeout: env.ETHERSCAN_TIMEOUT,
   },
   
   logging: {

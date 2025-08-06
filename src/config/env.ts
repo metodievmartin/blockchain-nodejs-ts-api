@@ -65,6 +65,7 @@ const EnvSchema = z.object({
   // RPC settings
   RPC_TIMEOUT: z.coerce.number().default(10000),
   RPC_RETRY_ATTEMPTS: z.coerce.number().default(3),
+  ETHERSCAN_TIMEOUT: z.coerce.number().default(5000), // 5 seconds
   
   // Logging
   LOG_LEVEL: z

@@ -47,6 +47,8 @@ import {
 import {
   isEtherscanTimeoutError,
   splitBlockRange,
+  createSmallerChunks,
+  withEtherscanTimeout,
 } from '../../utils/etherscan-helpers';
 import {
   getAddressInfoFromDB,
@@ -451,7 +453,7 @@ export async function processTransactionGap(
   });
 
   try {
-    const allTransactions: MappedTransaction[] = [];
+    const allTransactions: EtherscanTransaction[] = [];
     let currentStartBlock = fromBlock;
     let currentEndBlock = toBlock;
     let iterationCount = 0;
@@ -727,6 +729,7 @@ async function fetchTransactionsFromDatabase(
 
 /**
  * Pure Etherscan API call function - returns raw data only
+ * Limited to a 5-seconds timeout
  */
 async function attemptEtherscanFetch(
   address: string,
@@ -752,7 +755,10 @@ async function attemptEtherscanFetch(
     params,
   });
 
-  const etherscanTxs = await etherscanProvider.fetch('account', params);
+  const etherscanTxs = await withEtherscanTimeout<EtherscanTransaction[]>(
+    etherscanProvider.fetch('account', params),
+    `Etherscan transaction fetch for ${address}`
+  );
   const transactions = etherscanTxs || [];
   const hasMore = transactions.length === limit;
 

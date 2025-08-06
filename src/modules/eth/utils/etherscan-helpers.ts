@@ -4,6 +4,9 @@
  * Shared utilities for handling Etherscan API interactions and error handling
  */
 
+import { withTimeout, createTimeoutError } from '../../../lib/timeout';
+import appConfig from '../../../config/app.config';
+
 /**
  * Detects if an error is an Etherscan timeout error
  * Used across multiple services that interact with Etherscan API
@@ -49,7 +52,10 @@ export function createSmallerChunks(
   let currentFromBlock = fromBlock;
 
   while (currentFromBlock <= toBlock) {
-    const currentToBlock = Math.min(currentFromBlock + maxChunkSize - 1, toBlock);
+    const currentToBlock = Math.min(
+      currentFromBlock + maxChunkSize - 1,
+      toBlock
+    );
     chunks.push({
       fromBlock: currentFromBlock,
       toBlock: currentToBlock,
@@ -58,4 +64,19 @@ export function createSmallerChunks(
   }
 
   return chunks;
+}
+
+/**
+ * Wraps a promise with Etherscan API timeout
+ * Uses the configured timeout from app config
+ */
+export async function withEtherscanTimeout<T>(
+  promise: Promise<T>,
+  operation = 'Etherscan API call'
+): Promise<T> {
+  return withTimeout(
+    promise,
+    appConfig.blockchain.etherscanTimeout,
+    createTimeoutError(operation, appConfig.blockchain.etherscanTimeout).message
+  );
 }

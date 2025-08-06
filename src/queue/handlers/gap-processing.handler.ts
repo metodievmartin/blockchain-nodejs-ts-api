@@ -12,6 +12,10 @@ import { JOB_CONFIG } from '../config';
 import { createLogger } from '../../config/logger';
 import { queueGapsForProcessing } from '../client';
 import { processTransactionGap } from '../../modules/eth/tx/v1/tx.service';
+import {
+  isEtherscanTimeoutError,
+  createSmallerChunks,
+} from '../../modules/eth/utils/etherscan-helpers';
 
 const logger = createLogger('queue');
 
@@ -22,49 +26,6 @@ const etherscanLimiter = new Bottleneck({
   reservoirRefreshInterval: 1000, // Refresh every 1 second (1000ms)
   maxConcurrent: 1, // Only 1 request at a time to ensure proper rate limiting
 });
-
-/**
- * Check if error is an Etherscan query timeout
- */
-function isEtherscanTimeoutError(error: Error): boolean {
-  const errorMessage = error.message.toLowerCase();
-  return (
-    errorMessage.includes('query timeout') &&
-    errorMessage.includes('please select a smaller result dataset')
-  );
-}
-
-/**
- * Split a block range into smaller chunks for re-queuing
- */
-function createSmallerChunks(
-  address: string,
-  fromBlock: number,
-  toBlock: number,
-  chunkSize: number = 1000
-): Array<{ fromBlock: number; toBlock: number }> {
-  const chunks: Array<{ fromBlock: number; toBlock: number }> = [];
-  let currentFromBlock = fromBlock;
-
-  while (currentFromBlock <= toBlock) {
-    const currentToBlock = Math.min(currentFromBlock + chunkSize - 1, toBlock);
-    chunks.push({
-      fromBlock: currentFromBlock,
-      toBlock: currentToBlock,
-    });
-    currentFromBlock = currentToBlock + 1;
-  }
-
-  logger.info('Created smaller chunks for timeout recovery', {
-    address,
-    originalRange: `${fromBlock}-${toBlock}`,
-    chunkSize,
-    chunksCreated: chunks.length,
-    chunks: chunks.map((c) => `${c.fromBlock}-${c.toBlock}`),
-  });
-
-  return chunks;
-}
 
 /**
  * Process a single gap processing job
@@ -157,7 +118,16 @@ export async function handleGapProcessingJob(
       );
 
       try {
-        const chunks = createSmallerChunks(address, fromBlock, toBlock);
+        const chunks = createSmallerChunks(fromBlock, toBlock);
+
+        logger.info('Created smaller chunks for timeout recovery', {
+          jobId: job.id,
+          address,
+          originalRange: `${fromBlock}-${toBlock}`,
+          chunkSize: 1000,
+          chunksCreated: chunks.length,
+          chunks: chunks.map((c) => `${c.fromBlock}-${c.toBlock}`),
+        });
 
         // Convert chunks to Gap format for queueGapsForProcessing
         const gaps = chunks.map((chunk) => ({

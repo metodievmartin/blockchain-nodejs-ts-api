@@ -14,10 +14,10 @@
 export function mapEtherscanTransactionToDB(tx: any, address: string) {
   return {
     hash: tx.hash,
-    address: address.toLowerCase(),
+    address,
     blockNumber: BigInt(tx.blockNumber),
-    from: tx.from.toLowerCase(),
-    to: tx.to?.toLowerCase() || null,
+    from: tx.from,
+    to: tx.to || null,
     value: tx.value,
     gasPrice: tx.gasPrice,
     gasUsed: tx.gasUsed ? BigInt(tx.gasUsed) : null,
@@ -26,7 +26,7 @@ export function mapEtherscanTransactionToDB(tx: any, address: string) {
       tx.functionName ||
       (tx.input && tx.input !== '0x' ? tx.input.slice(0, 10) : null),
     txreceiptStatus: tx.txreceipt_status || tx.isError === '0' ? '1' : '0', // 1 = success, 0 = failed
-    contractAddress: tx.contractAddress?.toLowerCase() || null,
+    contractAddress: tx.contractAddress || null,
     timestamp: new Date(parseInt(tx.timeStamp) * 1000), // Convert Unix timestamp to Date
   };
 }
@@ -40,10 +40,10 @@ export function mapEtherscanTransactionToDB(tx: any, address: string) {
 export function mapEtherscanTransactionToAPI(tx: any, address: string) {
   return {
     hash: tx.hash,
-    address: address.toLowerCase(),
+    address,
     blockNumber: tx.blockNumber,
-    from: tx.from?.toLowerCase() || null,
-    to: tx.to?.toLowerCase() || null,
+    from: tx.from || null,
+    to: tx.to || null,
     value: tx.value,
     gasPrice: tx.gasPrice,
     gasUsed: tx.gasUsed,
@@ -52,7 +52,7 @@ export function mapEtherscanTransactionToAPI(tx: any, address: string) {
       tx.functionName ||
       (tx.input && tx.input !== '0x' ? tx.input.slice(0, 10) : null),
     txReceiptStatus: tx.txreceipt_status || tx.isError === '0' ? '1' : '0', // 1 = success, 0 = failed
-    contractAddress: tx.contractAddress?.toLowerCase() || null,
+    contractAddress: tx.contractAddress || null,
     timestamp: tx.timeStamp, // Convert Unix timestamp to Date
   };
 }

@@ -13,9 +13,9 @@ const redis = getOrCreateRedisClient();
  * Cache keys for different data types
  */
 const CACHE_KEYS = {
-  BALANCE: (address: string) => `blockchain:balance:${address.toLowerCase()}`,
+  BALANCE: (address: string) => `blockchain:balance:${address}`,
   TX_QUERY: (address: string, from: number, to: number) =>
-    `blockchain:txquery:${address.toLowerCase()}:${from}:${to}`,
+    `blockchain:txquery:${address}:${from}:${to}`,
   TX_PAGINATED: (
     address: string,
     fromBlock: number,
@@ -24,9 +24,9 @@ const CACHE_KEYS = {
     limit: number,
     order: string
   ) =>
-    `blockchain:tx:paginated:${address.toLowerCase()}:${fromBlock}:${toBlock}:${page}:${limit}:${order}`,
-  TX_COUNT: (address: string) => `blockchain:txcount:${address.toLowerCase()}`,
-  ADDRESS_INFO: (address: string) => `blockchain:address_info:${address.toLowerCase()}`,
+    `blockchain:tx:paginated:${address}:${fromBlock}:${toBlock}:${page}:${limit}:${order}`,
+  TX_COUNT: (address: string) => `blockchain:txcount:${address}`,
+  ADDRESS_INFO: (address: string) => `blockchain:address_info:${address}`,
 } as const;
 
 /**
@@ -302,11 +302,11 @@ export async function clearAddressCache(address: string): Promise<void> {
     ];
 
     // Get all paginated transaction cache keys for this address
-    const pattern = `blockchain:tx:paginated:${address.toLowerCase()}:*`;
+    const pattern = `blockchain:tx:paginated:${address}:*`;
     const paginatedKeys = await redis.keys(pattern);
 
     // Get all transaction query cache keys for this address
-    const queryPattern = `blockchain:txquery:${address.toLowerCase()}:*`;
+    const queryPattern = `blockchain:txquery:${address}:*`;
     const queryKeys = await redis.keys(queryPattern);
 
     const allKeys = [...keys, ...paginatedKeys, ...queryKeys];

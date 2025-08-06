@@ -19,7 +19,7 @@ export async function getAddressInfoFromDB(
 ): Promise<AddressInfo | null> {
   try {
     const result = await prisma.addressInfo.findUnique({
-      where: { address: address.toLowerCase() },
+      where: { address },
     });
 
     if (!result) {
@@ -52,7 +52,7 @@ export async function saveAddressInfoToDB(
 ): Promise<void> {
   try {
     await prisma.addressInfo.upsert({
-      where: { address: address.toLowerCase() },
+      where: { address },
       update: {
         isContract: addressInfo.isContract,
         creationBlock: addressInfo.creationBlock
@@ -61,7 +61,7 @@ export async function saveAddressInfoToDB(
         updatedAt: new Date(),
       },
       create: {
-        address: address.toLowerCase(),
+        address,
         isContract: addressInfo.isContract,
         creationBlock: addressInfo.creationBlock
           ? BigInt(addressInfo.creationBlock)

@@ -10,7 +10,7 @@ const prisma = getOrCreateDB();
 
 /**
  * Get coverage ranges for a given address and block range
- * @param address - Ethereum address (normalised)
+ * @param address - Ethereum address
  * @param requestedFrom - Starting block number
  * @param requestedTo - Ending block number
  * @returns Array of coverage ranges that overlap with the requested range
@@ -21,12 +21,10 @@ export async function getCoverageRanges(
   requestedTo: number
 ): Promise<Array<{ fromBlock: number; toBlock: number }>> {
   try {
-    const normalizedAddress = address.toLowerCase();
-
     // Get all coverage ranges that overlap with requested range
     const coverageRanges = await prisma.coverage.findMany({
       where: {
-        address: normalizedAddress,
+        address,
         toBlock: { gte: requestedFrom },
         fromBlock: { lte: requestedTo },
       },
@@ -35,7 +33,7 @@ export async function getCoverageRanges(
     });
 
     logger.debug('Retrieved coverage ranges', {
-      address: normalizedAddress,
+      address,
       requestedFrom,
       requestedTo,
       coverageCount: coverageRanges.length,
@@ -55,7 +53,7 @@ export async function getCoverageRanges(
 
 /**
  * Get all coverage ranges for an address
- * @param address - Ethereum address (normalised)
+ * @param address - Ethereum address
  * @returns Array of all coverage ranges for the address
  */
 export async function getAllCoverageRanges(address: string): Promise<
@@ -66,11 +64,9 @@ export async function getAllCoverageRanges(address: string): Promise<
   }>
 > {
   try {
-    const normalizedAddress = address.toLowerCase();
-
     const coverage = await prisma.coverage.findMany({
       where: {
-        address: normalizedAddress,
+        address,
       },
       orderBy: { fromBlock: 'asc' },
       select: {
@@ -81,7 +77,7 @@ export async function getAllCoverageRanges(address: string): Promise<
     });
 
     logger.debug('Retrieved all coverage ranges', {
-      address: normalizedAddress,
+      address,
       rangeCount: coverage.length,
     });
 
@@ -119,7 +115,7 @@ export async function getExistingTransactionsPaginated(
   try {
     const transactions = await db.transaction.findMany({
       where: {
-        address: address.toLowerCase(),
+        address,
         blockNumber: {
           gte: fromBlock,
           lte: toBlock,
@@ -171,7 +167,6 @@ export async function saveTransactionBatch(
   transactions: any[]
 ): Promise<void> {
   const db = getOrCreateDB();
-  const normalizedAddress = address.toLowerCase(); // Normalize address for consistency
 
   try {
     await db.$transaction(async (prisma) => {
@@ -179,11 +174,11 @@ export async function saveTransactionBatch(
       if (transactions.length > 0) {
         await prisma.transaction.createMany({
           data: transactions,
-          skipDuplicates: true, // Skip if transaction already exists
+          skipDuplicates: true,
         });
 
-        logger.debug('Saved transaction batch', {
-          address: normalizedAddress,
+        logger.debug('Saved transactions', {
+          address,
           fromBlock,
           toBlock,
           count: transactions.length,
@@ -194,7 +189,7 @@ export async function saveTransactionBatch(
       await prisma.coverage.upsert({
         where: {
           uniq_coverage: {
-            address: normalizedAddress, // Use normalized address
+            address, // Use normalized address
             fromBlock,
             toBlock,
           },
@@ -203,28 +198,28 @@ export async function saveTransactionBatch(
           // Coverage already exists, no need to update anything
         },
         create: {
-          address: normalizedAddress, // Use normalized address
+          address, // Use normalized address
           fromBlock,
           toBlock,
         },
       });
 
       logger.debug('Saved coverage range', {
-        address: normalizedAddress,
+        address,
         fromBlock,
         toBlock,
       });
     });
 
     logger.info('Transaction batch saved successfully', {
-      address: normalizedAddress,
+      address,
       fromBlock,
       toBlock,
       transactionCount: transactions.length,
     });
   } catch (error) {
     logger.error('Failed to save transaction batch', {
-      address: normalizedAddress,
+      address,
       fromBlock,
       toBlock,
       transactionCount: transactions.length,
@@ -236,14 +231,14 @@ export async function saveTransactionBatch(
 
 /**
  * Get transaction count for an address
- * @param address - Ethereum address (normalized)
+ * @param address - Ethereum address
  * @returns Number of transactions
  */
 export async function getTransactionCount(address: string): Promise<number> {
   try {
     const count = await prisma.transaction.count({
       where: {
-        address: address.toLowerCase(),
+        address,
       },
     });
 
@@ -260,17 +255,17 @@ export async function getTransactionCount(address: string): Promise<number> {
 
 /**
  * Delete all data for an address (for testing/cleanup)
- * @param address - Ethereum address (normalized)
+ * @param address - Ethereum address
  */
 export async function deleteAddressData(address: string): Promise<void> {
   try {
     await prisma.$transaction(async (tx) => {
       await tx.transaction.deleteMany({
-        where: { address: address.toLowerCase() },
+        where: { address },
       });
 
       await tx.coverage.deleteMany({
-        where: { address: address.toLowerCase() },
+        where: { address },
       });
     });
 
@@ -291,7 +286,7 @@ export interface Gap {
 
 /**
  * Save or update balance for an address
- * @param address - Ethereum address (normalized)
+ * @param address - Ethereum address
  * @param balance - Balance in wei as string
  * @param blockNumber - Block number when balance was fetched
  */
@@ -301,24 +296,22 @@ export async function saveBalance(
   blockNumber: bigint
 ): Promise<void> {
   try {
-    const normalizedAddress = address.toLowerCase();
-
     await prisma.balance.upsert({
-      where: { address: normalizedAddress },
+      where: { address },
       update: {
         balance,
         blockNumber,
         updatedAt: new Date(),
       },
       create: {
-        address: normalizedAddress,
+        address,
         balance,
         blockNumber,
       },
     });
 
     logger.debug('Balance saved to database', {
-      address: normalizedAddress,
+      address,
       balance,
       blockNumber: blockNumber.toString(),
     });
@@ -335,7 +328,7 @@ export async function saveBalance(
 
 /**
  * Get stored balance for an address
- * @param address - Ethereum address (normalized)
+ * @param address - Ethereum address
  * @returns Stored balance data or null if not found
  */
 export async function getStoredBalance(address: string): Promise<{
@@ -344,11 +337,9 @@ export async function getStoredBalance(address: string): Promise<{
   updatedAt: Date;
 } | null> {
   try {
-    const normalizedAddress = address.toLowerCase();
-
     const storedBalance = await prisma.balance.findUnique({
       where: {
-        address: normalizedAddress,
+        address,
       },
       select: {
         balance: true,
@@ -359,7 +350,7 @@ export async function getStoredBalance(address: string): Promise<{
 
     if (storedBalance) {
       logger.debug('Retrieved stored balance', {
-        address: normalizedAddress,
+        address,
         balance: storedBalance.balance,
         blockNumber: storedBalance.blockNumber.toString(),
         updatedAt: storedBalance.updatedAt,

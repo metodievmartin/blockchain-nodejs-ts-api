@@ -80,7 +80,7 @@ export interface MappedTransaction {
   gasUsed: string | null;
   gas: string | null; // Gas limit
   functionName: string | null; // Function signature/name
-  status: string; // Transaction status (1 = success, 0 = failed)
+  txReceiptStatus: string; // Transaction status (1 = success, 0 = failed)
   contractAddress: string | null; // Contract address for contract creation
   timestamp: string; // ISO string
 }

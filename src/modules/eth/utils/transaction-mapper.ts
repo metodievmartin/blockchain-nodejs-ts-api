@@ -73,7 +73,7 @@ export function mapDBTransactionToAPI(dbTx: any) {
     gasUsed: dbTx.gasUsed?.toString() || null,
     gas: dbTx.gas?.toString() || null,
     functionName: dbTx.functionName,
-    status: dbTx.txreceiptStatus,
+    txReceiptStatus: dbTx.txreceiptStatus,
     contractAddress: dbTx.contractAddress,
     timestamp: dbTx.timestamp.toISOString(),
   };

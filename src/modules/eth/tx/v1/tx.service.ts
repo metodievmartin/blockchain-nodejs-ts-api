@@ -64,6 +64,36 @@ const TX_SERVICE_CONFIG = {
 } as const;
 
 /**
+ * Detects if an error is an Etherscan timeout error
+ */
+function isEtherscanTimeoutError(error: any): boolean {
+  return (
+    error?.info?.result?.message?.includes('Query Timeout occured') ||
+    error?.message?.includes('Query Timeout') ||
+    error?.code === 'SERVER_ERROR'
+  );
+}
+
+/**
+ * Splits a block range in half and returns the appropriate half based on sort order
+ */
+function splitBlockRange(
+  fromBlock: number,
+  toBlock: number,
+  order: 'asc' | 'desc'
+): { from: number; to: number } {
+  const midBlock = Math.floor((fromBlock + toBlock) / 2);
+
+  if (order === 'asc') {
+    // Take the first half for ascending order (earlier blocks first)
+    return { from: fromBlock, to: midBlock };
+  } else {
+    // Take the second half for descending order (later blocks first)
+    return { from: midBlock + 1, to: toBlock };
+  }
+}
+
+/**
  * Handle database-only response when no gaps exist
  */
 async function fetchTransactionsFromDatabase(
@@ -113,42 +143,75 @@ async function fetchTransactionsFromDatabase(
 }
 
 /**
- * Handle Etherscan fallback when gaps exist
+ * Pure Etherscan API call function - returns raw data only
  */
-async function fetchTransactionsFromEtherscan(
-  normalizedAddress: string,
-  actualFrom: number,
-  actualTo: number,
+async function attemptEtherscanFetch(
+  address: string,
+  fromBlock: number,
+  toBlock: number,
   page: number,
   limit: number,
-  order: 'asc' | 'desc',
-  gaps: any[]
-): Promise<GetTransactionsResponse> {
+  order: 'asc' | 'desc'
+): Promise<{ transactions: EtherscanTransaction[]; hasMore: boolean }> {
   const etherscanProvider = getEtherscanProvider();
+  const params = {
+    action: 'txlist',
+    address,
+    startblock: fromBlock,
+    endblock: toBlock,
+    offset: limit,
+    page,
+    sort: order,
+  };
 
+  logger.debug('Fetching transactions from Etherscan', {
+    address,
+    params,
+  });
+
+  const etherscanTxs = await etherscanProvider.fetch('account', params);
+  const transactions = etherscanTxs || [];
+  const hasMore = transactions.length === limit;
+
+  return { transactions, hasMore };
+}
+
+/**
+ * Pure Etherscan fetcher with smart retry logic
+ * Returns null on failure instead of throwing - orchestration handled by caller
+ */
+async function fetchTransactionsFromEtherscan(
+  address: string,
+  fromBlock: number,
+  toBlock: number,
+  page: number,
+  limit: number,
+  order: 'asc' | 'desc'
+): Promise<GetTransactionsResponse | null> {
   try {
-    const params = {
-      action: 'txlist',
-      address: normalizedAddress,
-      startblock: actualFrom,
-      endblock: actualTo,
-      offset: limit,
-      page: page,
-      sort: order,
-    };
-
+    // First attempt: full range
     logger.debug('Fetching transactions from Etherscan', {
-      address: normalizedAddress,
-      params,
+      address,
+      fromBlock,
+      toBlock,
+      blocks: toBlock - fromBlock,
+      page,
+      limit,
+      order,
     });
-    
-    const etherscanTxs = await etherscanProvider.fetch('account', params);
-    const transactions = etherscanTxs || [];
-    const hasMore = transactions.length === limit;
+
+    const { transactions, hasMore } = await attemptEtherscanFetch(
+      address,
+      fromBlock,
+      toBlock,
+      page,
+      limit,
+      order
+    );
 
     const result: GetTransactionsResponse = {
       transactions: transactions.map((tx: EtherscanTransaction) =>
-        mapEtherscanTransactionToAPI(tx, normalizedAddress)
+        mapEtherscanTransactionToAPI(tx, address)
       ),
       fromCache: false,
       pagination: {
@@ -157,15 +220,15 @@ async function fetchTransactionsFromEtherscan(
         hasMore,
       },
       metadata: {
-        address: normalizedAddress,
-        fromBlock: actualFrom,
-        toBlock: actualTo,
+        address,
+        fromBlock,
+        toBlock,
         source: 'etherscan' as const,
       },
     };
 
     logger.debug('Returned Etherscan result', {
-      address: normalizedAddress,
+      address,
       page,
       limit,
       count: transactions.length,
@@ -173,23 +236,74 @@ async function fetchTransactionsFromEtherscan(
 
     return result;
   } catch (error) {
-    logger.error('Etherscan fetch failed, falling back to database', {
-      address: normalizedAddress,
+    if (isEtherscanTimeoutError(error)) {
+      logger.warn('Etherscan timeout, retrying with half range', {
+        address,
+        originalRange: `${fromBlock}-${toBlock}`,
+        blocks: toBlock - fromBlock,
+      });
+
+      try {
+        // Second attempt: half range
+        const { from, to } = splitBlockRange(fromBlock, toBlock, order);
+        logger.debug('Retrying Etherscan with reduced range', {
+          address,
+          reducedRange: `${from}-${to}`,
+          blocks: to - from,
+        });
+
+        const { transactions, hasMore } = await attemptEtherscanFetch(
+          address,
+          from,
+          to,
+          page,
+          limit,
+          order
+        );
+
+        const result: GetTransactionsResponse = {
+          transactions: transactions.map((tx: EtherscanTransaction) =>
+            mapEtherscanTransactionToAPI(tx, address)
+          ),
+          fromCache: false,
+          pagination: {
+            page,
+            limit,
+            hasMore,
+          },
+          metadata: {
+            address,
+            fromBlock,
+            toBlock,
+            source: 'etherscan' as const,
+          },
+        };
+
+        logger.debug('Returned Etherscan result', {
+          address,
+          page,
+          limit,
+          count: transactions.length,
+        });
+
+        return result;
+      } catch (retryError) {
+        logger.error('Etherscan retry with half range also failed', {
+          address,
+          retryError:
+            retryError instanceof Error
+              ? retryError.message
+              : String(retryError),
+        });
+        return null;
+      }
+    }
+
+    logger.error('Etherscan fetch failed', {
+      address,
       error: error instanceof Error ? error.message : String(error),
     });
-
-    // Fallback to the database even with gaps
-    return fetchTransactionsFromDatabase(
-      normalizedAddress,
-      actualFrom,
-      actualTo,
-      page,
-      limit,
-      order,
-      {
-        incomplete: true,
-      }
-    );
+    return null;
   }
 }
 
@@ -268,8 +382,10 @@ export async function getTransactions(
   );
   const hasGaps = gaps.length > 0;
 
+  let result: GetTransactionsResponse;
+
   if (!hasGaps) {
-    // No gaps - serve from the database
+    // -- No gaps - serve from the database directly --
     logger.info('Serving from database (complete coverage)', {
       address: normalizedAddress,
       fromBlock: actualFrom,
@@ -278,7 +394,7 @@ export async function getTransactions(
       limit,
     });
 
-    const result = await fetchTransactionsFromDatabase(
+    result = await fetchTransactionsFromDatabase(
       normalizedAddress,
       actualFrom,
       actualTo,
@@ -301,25 +417,44 @@ export async function getTransactions(
     return result;
   }
 
-  logger.info('Gaps detected, fetching from Etherscan', {
+  // -- There are gaps, serve from Etherscan and schedule background processing --
+  logger.info('Serving from Etherscan (incomplete coverage)', {
     address: normalizedAddress,
-    gaps: gaps.length,
+    fromBlock: actualFrom,
+    toBlock: actualTo,
     page,
     limit,
   });
 
-  // Gaps exist - fetch from Etherscan for immediate response
-  const result = await fetchTransactionsFromEtherscan(
+  // Try Etherscan first
+  result = await fetchTransactionsFromEtherscan(
     normalizedAddress,
     actualFrom,
     actualTo,
     page,
     limit,
-    order,
-    gaps
+    order
   );
 
-  // Cache the result
+  if (!result) {
+    // If Etherscan failed - fallback to the database
+    logger.info('Etherscan failed, falling back to database', {
+      address: normalizedAddress,
+    });
+
+    result = await fetchTransactionsFromDatabase(
+      normalizedAddress,
+      actualFrom,
+      actualTo,
+      page,
+      limit,
+      order,
+      {
+        incomplete: true,
+      }
+    );
+  }
+
   await setCachedPaginatedTransactionQuery(
     normalizedAddress,
     actualFrom,
@@ -330,29 +465,9 @@ export async function getTransactions(
     result
   );
 
-  // Start background processing to fill the database (non-blocking)
-  setImmediate(() => {
-    logger.info('Starting background gap processing', {
-      address: normalizedAddress,
-      gapsCount: gaps.length,
-      totalBlocks: gaps.reduce(
-        (sum, gap) => sum + (gap.toBlock - gap.fromBlock + 1),
-        0
-      ),
-    });
-
-    processGapsInBackground(normalizedAddress, gaps).catch((error) => {
-      logger.error('Background gap processing failed', {
-        address: normalizedAddress,
-        gapsCount: gaps.length,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      // Don't throw - just log the error so it doesn't crash anything
-    });
-  });
-
-  // Set backgroundProcessing flag since we've scheduled background work
-  result.metadata.backgroundProcessing = true;
+  // Schedule background processing to fill gaps (non-blocking)
+  processGapsInBackground(normalizedAddress, gaps);
+  logger.info('After Scheduled background processing');
 
   return result;
 }

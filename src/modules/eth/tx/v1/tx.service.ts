@@ -73,8 +73,8 @@ const TX_SERVICE_CONFIG = {
  * Get paginated transactions for an address
  * Serves immediate results from Etherscan/cache while background processing fills DB
  * @param address - Ethereum address
- * @param fromBlock - Starting block number (optional)
- * @param toBlock - Ending block number (optional)
+ * @param originalFromBlock - Starting block number
+ * @param originalToBlock - Ending block number (optional)
  * @param page - Page number (default: 1)
  * @param limit - Results per page (default: 1000, max: 1000)
  * @param order - Sort order (default: 'asc')
@@ -82,8 +82,8 @@ const TX_SERVICE_CONFIG = {
  */
 export async function getTransactions(
   address: string,
-  fromBlock?: number,
-  toBlock?: number,
+  originalFromBlock: number = 0,
+  originalToBlock?: number,
   page: number = TX_SERVICE_CONFIG.DEFAULT_PAGE,
   limit: number = TX_SERVICE_CONFIG.DEFAULT_LIMIT,
   order: 'asc' | 'desc' = 'asc'
@@ -92,28 +92,34 @@ export async function getTransactions(
 
   // Validate and normalize inputs
   const normalizedAddress = validateAndNormalizeAddress(address);
-  validateBlockRange(fromBlock, toBlock);
+  validateBlockRange(originalFromBlock, originalToBlock);
 
   const provider = getEthereumProvider();
 
-  // Determine actual block range
-  const actualFrom =
-    fromBlock ?? (await resolveStartingBlock(normalizedAddress));
-  const actualTo = toBlock ?? (await provider.getBlockNumber());
+  // Determine actual block range and get address info
+  const addressInfo = await resolveStartingBlock(normalizedAddress);
+  const actualFrom = getStartingBlockFromInfo(addressInfo);
+  const latestBlock = await provider.getBlockNumber();
+  // Ensure toBlock doesn't exceed the latest block to prevent future block requests
+  const actualTo = originalToBlock
+    ? Math.min(originalToBlock, latestBlock)
+    : latestBlock;
 
   logger.info('Processing paginated transaction request', {
     address: normalizedAddress,
     page,
     limit,
     order,
-    fromBlock: actualFrom,
-    toBlock: actualTo,
+    originalFromBlock: originalFromBlock,
+    originalToBlock: originalToBlock,
+    actualFromBlock: actualFrom,
+    actualToBlock: actualTo,
   });
 
   // Check cache first
   const cached = await getCachedPaginatedTransactionQuery(
     normalizedAddress,
-    actualFrom,
+    originalFromBlock,
     actualTo,
     page,
     limit,
@@ -130,15 +136,99 @@ export async function getTransactions(
     return cached;
   }
 
+  /*
+   * Contract pre-creation optimisation
+   *
+   * For contracts, we can optimise by avoiding unnecessary processing of blocks
+   * before the contract was created, since contracts cannot have transactions
+   * before their creation block. Two cases handled:
+   *  1. Entire requested range is before creation → return an empty result immediately and save entire range
+   *  2. Request starts before creation but extends beyond → mark pre-creation as covered, process the rest
+   */
+  let optimizedFrom = actualFrom;
+  if (
+    addressInfo.isContract &&
+    addressInfo.creationBlock !== undefined &&
+    addressInfo.creationBlock > 0
+  ) {
+    const creationBlock = addressInfo.creationBlock;
+
+    // Case 1: Entire requested range is before contract creation
+    if (actualTo < creationBlock) {
+      logger.info(
+        'Request range entirely before contract creation - marking as covered',
+        {
+          address: normalizedAddress,
+          requestedRange: `${originalFromBlock}-${actualTo}`,
+          creationBlock,
+        }
+      );
+
+      // Mark the entire range as covered with no transactions
+      // Save from 0 to actualTo for maximum optimisation benefit
+      await saveTransactionBatch(normalizedAddress, 0, creationBlock - 1, []);
+
+      // Build the empty result
+      const optimisedResult = {
+        transactions: [],
+        fromCache: false,
+        pagination: {
+          page,
+          limit,
+          hasMore: false,
+        },
+        metadata: {
+          address: normalizedAddress,
+          fromBlock: originalFromBlock,
+          toBlock: actualTo,
+          source: 'database' as const,
+        },
+      };
+
+      // Cache the result with the original requested from and the actualTo
+      await setCachedPaginatedTransactionQuery(
+        normalizedAddress,
+        originalFromBlock,
+        actualTo,
+        page,
+        limit,
+        order,
+        optimisedResult
+      );
+
+      return optimisedResult;
+    }
+
+    // Case 2: Request starts before creation but extends beyond
+    if (originalFromBlock < creationBlock) {
+      logger.info('Marking pre-creation range as covered', {
+        address: normalizedAddress,
+        preCreationRange: `${originalFromBlock}-${creationBlock - 1}`,
+        creationBlock,
+      });
+
+      // Mark pre-creation range as covered with no transactions
+      await saveTransactionBatch(
+        normalizedAddress,
+        originalFromBlock,
+        creationBlock - 1,
+        []
+      );
+
+      // Adjust processing to start from creation block
+      optimizedFrom = creationBlock;
+    }
+  }
+
   // Check for gaps in our database coverage
   const coverageRanges = await getCoverageRanges(
     normalizedAddress,
-    actualFrom,
+    optimizedFrom,
     actualTo
   );
   const gaps = findGapsInCoverage(
     coverageRanges,
-    actualFrom,
+    optimizedFrom,
     actualTo,
     normalizedAddress
   );
@@ -150,7 +240,7 @@ export async function getTransactions(
     // -- No gaps - serve from the database directly --
     logger.info('Serving from database (complete coverage)', {
       address: normalizedAddress,
-      fromBlock: actualFrom,
+      fromBlock: optimizedFrom,
       toBlock: actualTo,
       page,
       limit,
@@ -158,17 +248,17 @@ export async function getTransactions(
 
     result = await fetchTransactionsFromDatabase(
       normalizedAddress,
-      actualFrom,
+      optimizedFrom,
       actualTo,
       page,
       limit,
       order
     );
 
-    // Cache the result
+    // Cache the result with the original requested from and the actualTo
     await setCachedPaginatedTransactionQuery(
       normalizedAddress,
-      actualFrom,
+      originalFromBlock,
       actualTo,
       page,
       limit,
@@ -180,10 +270,11 @@ export async function getTransactions(
   }
 
   // -- There are gaps, serve from Etherscan and schedule background processing --
-  logger.info('Serving from Etherscan (incomplete coverage)', {
+  logger.info('Gaps detected - attempting Etherscan fetch', {
     address: normalizedAddress,
-    fromBlock: actualFrom,
+    fromBlock: optimizedFrom,
     toBlock: actualTo,
+    gaps: gaps.length,
     page,
     limit,
   });
@@ -191,7 +282,7 @@ export async function getTransactions(
   // Try Etherscan first
   result = await fetchTransactionsFromEtherscan(
     normalizedAddress,
-    actualFrom,
+    optimizedFrom,
     actualTo,
     page,
     limit,
@@ -206,7 +297,7 @@ export async function getTransactions(
 
     result = await fetchTransactionsFromDatabase(
       normalizedAddress,
-      actualFrom,
+      optimizedFrom,
       actualTo,
       page,
       limit,
@@ -217,9 +308,10 @@ export async function getTransactions(
     );
   }
 
+  // Cache the result with the original requested from and the actualTo
   await setCachedPaginatedTransactionQuery(
     normalizedAddress,
-    actualFrom,
+    originalFromBlock,
     actualTo,
     page,
     limit,
@@ -229,7 +321,6 @@ export async function getTransactions(
 
   // Schedule background processing to fill gaps (non-blocking)
   processGapsInBackground(normalizedAddress, gaps);
-  logger.info('After Scheduled background processing');
 
   return result;
 }
@@ -607,24 +698,21 @@ export async function processTransactionGap(
 }
 
 /**
- * Resolves the appropriate starting block for an address based on its type
- * Implements 3-tier caching: Redis → Database → Provider detection
- *
- * Note: Combines pure fetching with caching side effects for optimal performance and simplicity.
- *
- * @param address - The address to resolve starting block for
- * @returns Starting block number (creation block for contracts, 0 for EOAs)
+ * Resolve the starting block for an address with 3-tier caching
+ * Uses Redis cache, database persistence, and blockchain detection as fallbacks
+ * @param address - Ethereum address (checksummed)
+ * @returns Address info with contract detection and creation block
  */
-export async function resolveStartingBlock(address: string): Promise<number> {
-  // 1. Try cache first
-  const cachedAddressInfo = await getCachedAddressInfo(address);
-  if (cachedAddressInfo) {
-    logger.debug('Address info cache hit', {
+async function resolveStartingBlock(address: string): Promise<AddressInfo> {
+  // 1. Check Redis cache first
+  const cached = await getCachedAddressInfo(address);
+  if (cached) {
+    logger.debug('Address info found in cache', {
       address,
-      isContract: cachedAddressInfo.isContract,
-      creationBlock: cachedAddressInfo.creationBlock,
+      isContract: cached.isContract,
+      creationBlock: cached.creationBlock,
     });
-    return getStartingBlockFromInfo(cachedAddressInfo);
+    return cached;
   }
 
   // 2. Try the database
@@ -636,10 +724,10 @@ export async function resolveStartingBlock(address: string): Promise<number> {
       creationBlock: storedAddressInfo.creationBlock,
     });
 
-    // Populate Redis cache from database
+    // Populate Redis cache for next time
     await setCachedAddressInfo(address, storedAddressInfo);
 
-    return getStartingBlockFromInfo(storedAddressInfo);
+    return storedAddressInfo;
   }
 
   // 3. Find the address info scanning the blockchain
@@ -662,7 +750,7 @@ export async function resolveStartingBlock(address: string): Promise<number> {
     creationBlock: addressInfo.creationBlock,
   });
 
-  return getStartingBlockFromInfo(addressInfo);
+  return addressInfo;
 }
 
 /**

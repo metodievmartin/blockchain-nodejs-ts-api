@@ -189,7 +189,7 @@ export async function saveTransactionBatch(
       await prisma.coverage.upsert({
         where: {
           uniq_coverage: {
-            address, // Use normalized address
+            address,
             fromBlock,
             toBlock,
           },
@@ -198,7 +198,7 @@ export async function saveTransactionBatch(
           // Coverage already exists, no need to update anything
         },
         create: {
-          address, // Use normalized address
+          address,
           fromBlock,
           toBlock,
         },

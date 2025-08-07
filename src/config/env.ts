@@ -46,31 +46,45 @@ const EnvSchema = z.object({
   JWT_SECRET: z
     .string('Invalid or missing secret')
     .min(32, 'The secret must be at least 32 characters long'),
-  
+
   // Blockchain configuration
   SEPOLIA_RPC_URL: z.url(),
   ETHERSCAN_API_KEY: z.string().optional(),
-  
+
   // Performance tuning
   BLOCKCHAIN_BATCH_SIZE: z.coerce.number().default(1000),
   BLOCKCHAIN_SYNC_THRESHOLD: z.coerce.number().default(2000),
   BLOCKCHAIN_MAX_CONCURRENT: z.coerce.number().default(3),
-  
+
   // Caching TTL settings (in seconds)
   BALANCE_CACHE_TTL: z.coerce.number().default(30), // 30 seconds
   TX_QUERY_CACHE_TTL: z.coerce.number().default(300), // 5 minutes
   TRANSACTION_COUNT_CACHE_TTL: z.coerce.number().default(300), // 5 minutes
   ADDRESS_INFO_CACHE_TTL: z.coerce.number().default(604800), // 7 days
-  
+
   // RPC settings
   RPC_TIMEOUT: z.coerce.number().default(10000),
   RPC_RETRY_ATTEMPTS: z.coerce.number().default(3),
   ETHERSCAN_TIMEOUT: z.coerce.number().default(5000), // 5 seconds
-  
+
   // Logging
   LOG_LEVEL: z
     .enum(['error', 'warn', 'info', 'debug', 'verbose'])
     .default('info'), // Default to 'info' to disable debug logs
+
+  // CORS configuration
+  CORS_ORIGIN: z.string().optional().default('*'), // Default to allow all origins
+
+  // Middleware toggles
+  ENABLE_RATE_LIMITING: z
+    .string()
+    .default('true')
+    .transform((val) => val === 'true'), // Enable by default
+
+  ENABLE_COMPRESSION: z
+    .string()
+    .default('true')
+    .transform((val) => val === 'true'), // Enable by default
 });
 
 const parsed = EnvSchema.safeParse(process.env);

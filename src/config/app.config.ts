@@ -40,6 +40,46 @@ const appConfig = {
 
   security: {
     saltRounds: env.SALT_ROUNDS,
+
+    // CORS settings - Flexible configuration via environment variable
+    cors: {
+      origin:
+        env.CORS_ORIGIN === '*'
+          ? true // Allow all origins
+          : env.CORS_ORIGIN.includes(',')
+            ? env.CORS_ORIGIN.split(',').map((origin) => origin.trim()) // Multiple origins
+            : env.CORS_ORIGIN, // Single origin
+    },
+
+    // Rate limiting (disable in production if handled by load balancer)
+    rateLimit: {
+      enabled: env.ENABLE_RATE_LIMITING,
+      windowMs: 10 * 60 * 1000, // 15 minutes
+      max: env.NODE_ENV === 'production' ? 100 : 1000, // Stricter in production
+      message: 'Too many requests from this IP, please try again later.',
+    },
+
+    // Request size limits
+    requestSizeLimit: '10mb',
+
+    // Helmet security headers configuration
+    helmet: {
+      enabled: true, // Keep enabled - these are application-level security headers
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          scriptSrc: ["'self'"],
+          imgSrc: ["'self'", 'data:', 'https:'],
+        },
+      },
+      hsts: false, // Disable if load balancer handles SSL termination
+    },
+
+    // Compression (disable in production if handled by reverse proxy)
+    compression: {
+      enabled: env.ENABLE_COMPRESSION,
+    },
   },
 
   eth: {

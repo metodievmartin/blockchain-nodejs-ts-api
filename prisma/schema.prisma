@@ -68,7 +68,6 @@ model Transaction {
   createdAt       DateTime @default(now()) @map("created_at")
 
   @@index([address, blockNumber], name: "idx_address_block")
-  @@index([address, timestamp], name: "idx_address_timestamp")
   @@map("transactions")
 }
 
@@ -102,8 +101,6 @@ model Balance {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  @@index([address], name: "idx_balance_address")
-  @@index([address, blockNumber], name: "idx_balance_address_block")
   @@map("balances")
 }
 
@@ -120,7 +117,5 @@ model AddressInfo {
   detectedAt    DateTime @default(now()) @map("detected_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  @@index([address], name: "idx_address_info_address")
-  @@index([isContract], name: "idx_address_info_is_contract")
   @@map("address_info")
 }

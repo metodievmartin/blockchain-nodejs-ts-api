@@ -69,7 +69,7 @@ export async function setCachedBalance(
 ): Promise<void> {
   try {
     const key = CACHE_KEYS.BALANCE(address);
-    const ttl = appConfig.blockchain.balanceCacheTtl;
+    const ttl = appConfig.eth.balanceCacheTtl;
 
     await redis.hSet(key, {
       balance,
@@ -117,7 +117,7 @@ export async function setCachedTransactionQuery(
 ): Promise<void> {
   try {
     const key = CACHE_KEYS.TX_QUERY(address, fromBlock, toBlock);
-    const ttl = appConfig.blockchain.txQueryCacheTtl;
+    const ttl = appConfig.eth.txQueryCacheTtl;
 
     await redis.setEx(key, ttl, JSON.stringify(transactions));
 
@@ -247,7 +247,7 @@ export async function setCachedTransactionCount(
 ): Promise<void> {
   try {
     const key = CACHE_KEYS.TX_COUNT(address);
-    const ttl = appConfig.blockchain.transactionCountCacheTtl;
+    const ttl = appConfig.eth.transactionCountCacheTtl;
 
     await redis.setEx(key, ttl, count.toString());
 
@@ -280,7 +280,7 @@ export async function setCachedAddressInfo(
 ): Promise<void> {
   try {
     const key = CACHE_KEYS.ADDRESS_INFO(address);
-    const ttl = appConfig.blockchain.addressInfoCacheTtl;
+    const ttl = appConfig.eth.addressInfoCacheTtl;
 
     await redis.setEx(key, ttl, JSON.stringify(info));
 
@@ -313,7 +313,10 @@ export async function clearAddressCache(address: string): Promise<void> {
 
     if (allKeys.length > 0) {
       await redis.del(allKeys);
-      logger.debug('Cleared cache for address', { address, keysCleared: allKeys.length });
+      logger.debug('Cleared cache for address', {
+        address,
+        keysCleared: allKeys.length,
+      });
     }
   } catch (error) {
     logger.error('Error clearing cache for address', { address, error });

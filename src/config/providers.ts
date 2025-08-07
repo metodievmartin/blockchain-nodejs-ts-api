@@ -12,23 +12,28 @@ import appConfig from './app.config';
 let provider: ethers.JsonRpcProvider | null = null;
 let etherscanProvider: ethers.EtherscanProvider | null = null;
 
+// Extract chain-specific configuration
+const sepoliaChain = appConfig.eth.chains.sepolia;
+const sepoliaRpcUrl = sepoliaChain.rpcUrl;
+const sepoliaNetworkConfig = {
+  name: sepoliaChain.name,
+  chainId: sepoliaChain.chainId,
+};
+
 /**
  * Get or create Ethereum provider singleton
  * @returns Ethereum provider instance
  */
 export function getEthereumProvider(): ethers.JsonRpcProvider {
   if (!provider) {
-    provider = new ethers.JsonRpcProvider(appConfig.blockchain.rpcUrl, {
-      name: 'sepolia',
-      chainId: 11155111,
-    });
+    provider = new ethers.JsonRpcProvider(sepoliaRpcUrl, sepoliaNetworkConfig);
 
     // Configure timeouts and polling
     provider.pollingInterval = 4000; // 4 seconds
 
     logger.info('Ethereum provider initialized', {
-      network: 'sepolia',
-      rpcUrl: appConfig.blockchain.rpcUrl.replace(/\/\/.*@/, '//***@'), // Hide credentials in logs
+      network: sepoliaNetworkConfig.name,
+      chainId: sepoliaNetworkConfig.chainId,
     });
   }
 
@@ -42,18 +47,14 @@ export function getEthereumProvider(): ethers.JsonRpcProvider {
 export function getEtherscanProvider(): ethers.EtherscanProvider {
   if (!etherscanProvider) {
     etherscanProvider = new ethers.EtherscanProvider(
-      {
-        name: 'sepolia',
-        chainId: 11155111,
-      },
-      appConfig.blockchain.etherscanApiKey
+      sepoliaNetworkConfig,
+      appConfig.eth.etherscanApiKey
     );
 
     logger.info('Etherscan provider initialized', {
-      network: 'sepolia',
+      network: sepoliaNetworkConfig.name,
+      chainId: sepoliaNetworkConfig.chainId,
     });
-
-    etherscanProvider;
   }
 
   return etherscanProvider;

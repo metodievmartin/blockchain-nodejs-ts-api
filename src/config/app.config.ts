@@ -33,38 +33,46 @@ const appConfig = {
     refreshToken: {
       expiresIn: '7d',
     },
-    
+
     // Maximum number of active sessions per user
     maxSessionsPerUser: 5,
   },
-  
+
   security: {
     saltRounds: env.SALT_ROUNDS,
   },
-  
-  blockchain: {
-    rpcUrl: env.SEPOLIA_RPC_URL,
+
+  eth: {
     etherscanApiKey: env.ETHERSCAN_API_KEY,
-    
+
+    // Chain configurations
+    chains: {
+      sepolia: {
+        name: 'sepolia',
+        chainId: 11155111,
+        rpcUrl: env.SEPOLIA_RPC_URL,
+      },
+    },
+
     // Performance tuning
     batchSize: env.BLOCKCHAIN_BATCH_SIZE,
     syncThreshold: env.BLOCKCHAIN_SYNC_THRESHOLD,
     maxConcurrent: env.BLOCKCHAIN_MAX_CONCURRENT,
-    
+
     // Caching
     balanceCacheTtl: env.BALANCE_CACHE_TTL,
     txQueryCacheTtl: env.TX_QUERY_CACHE_TTL,
     transactionCountCacheTtl: env.TRANSACTION_COUNT_CACHE_TTL,
     addressInfoCacheTtl: env.ADDRESS_INFO_CACHE_TTL,
-    
+
     // RPC settings
     rpcTimeout: env.RPC_TIMEOUT,
     rpcRetryAttempts: env.RPC_RETRY_ATTEMPTS,
-    
+
     // Etherscan API settings
     etherscanTimeout: env.ETHERSCAN_TIMEOUT,
   },
-  
+
   logging: {
     level: env.LOG_LEVEL,
   },

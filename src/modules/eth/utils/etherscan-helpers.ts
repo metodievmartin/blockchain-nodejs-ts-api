@@ -76,7 +76,7 @@ export async function withEtherscanTimeout<T>(
 ): Promise<T> {
   return withTimeout(
     promise,
-    appConfig.blockchain.etherscanTimeout,
-    createTimeoutError(operation, appConfig.blockchain.etherscanTimeout).message
+    appConfig.eth.etherscanTimeout,
+    createTimeoutError(operation, appConfig.eth.etherscanTimeout).message
   );
 }

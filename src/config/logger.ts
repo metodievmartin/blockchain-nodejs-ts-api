@@ -58,6 +58,9 @@ const consoleFormat = winston.format.combine(
   })
 );
 
+// Define proper type for log metadata
+type LogMeta = Record<string, unknown> | string | undefined;
+
 /**
  * Create a scoped Winston logger instance
  * @param scope - The scope for the logger (e.g., 'api', 'queue')
@@ -138,12 +141,12 @@ export function createLogger(scope: string = 'api') {
 
   // Create a logger interface compatible with existing usage
   return {
-    fatal: (message: string | Error | unknown, meta?: any) => {
+    fatal: (message: string | Error | unknown, meta?: LogMeta) => {
       if (message instanceof Error) {
         winstonLogger.error(message.message, {
           error: message,
           stack: message.stack,
-          ...meta,
+          ...(typeof meta === 'object' && meta !== null ? meta : {}),
         });
       } else {
         const logMessage = String(message);
@@ -151,12 +154,12 @@ export function createLogger(scope: string = 'api') {
         winstonLogger.error(logMessage, logMeta);
       }
     },
-    error: (message: string | Error | unknown, meta?: any) => {
+    error: (message: string | Error | unknown, meta?: LogMeta) => {
       if (message instanceof Error) {
         winstonLogger.error(message.message, {
           error: message,
           stack: message.stack,
-          ...meta,
+          ...(typeof meta === 'object' && meta !== null ? meta : {}),
         });
       } else {
         const logMessage = String(message);
@@ -164,12 +167,12 @@ export function createLogger(scope: string = 'api') {
         winstonLogger.error(logMessage, logMeta);
       }
     },
-    warn: (message: string | Error | unknown, meta?: any) => {
+    warn: (message: string | Error | unknown, meta?: LogMeta) => {
       if (message instanceof Error) {
         winstonLogger.warn(message.message, {
           error: message,
           stack: message.stack,
-          ...meta,
+          ...(typeof meta === 'object' && meta !== null ? meta : {}),
         });
       } else {
         const logMessage = String(message);
@@ -177,12 +180,12 @@ export function createLogger(scope: string = 'api') {
         winstonLogger.warn(logMessage, logMeta);
       }
     },
-    info: (message: string | Error | unknown, meta?: any) => {
+    info: (message: string | Error | unknown, meta?: LogMeta) => {
       if (message instanceof Error) {
         winstonLogger.info(message.message, {
           error: message,
           stack: message.stack,
-          ...meta,
+          ...(typeof meta === 'object' && meta !== null ? meta : {}),
         });
       } else {
         const logMessage = String(message);
@@ -190,12 +193,12 @@ export function createLogger(scope: string = 'api') {
         winstonLogger.info(logMessage, logMeta);
       }
     },
-    debug: (message: string | Error | unknown, meta?: any) => {
+    debug: (message: string | Error | unknown, meta?: LogMeta) => {
       if (message instanceof Error) {
         winstonLogger.debug(message.message, {
           error: message,
           stack: message.stack,
-          ...meta,
+          ...(typeof meta === 'object' && meta !== null ? meta : {}),
         });
       } else {
         const logMessage = String(message);
@@ -203,12 +206,12 @@ export function createLogger(scope: string = 'api') {
         winstonLogger.debug(logMessage, logMeta);
       }
     },
-    trace: (message: string | Error | unknown, meta?: any) => {
+    trace: (message: string | Error | unknown, meta?: LogMeta) => {
       if (message instanceof Error) {
         winstonLogger.verbose(message.message, {
           error: message,
           stack: message.stack,
-          ...meta,
+          ...(typeof meta === 'object' && meta !== null ? meta : {}),
         });
       } else {
         const logMessage = String(message);

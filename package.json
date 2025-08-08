@@ -11,7 +11,12 @@
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc",
-    "test": "jest",
+    "test": "jest --detectOpenHandles",
+    "test:unit": "jest tests/unit --detectOpenHandles",
+    "test:integration": "jest tests/integration --detectOpenHandles",
+    "test:unit:watch": "jest tests/unit --watch",
+    "test:integration:watch": "jest tests/integration --watch",
+    "test:coverage": "jest --coverage",
     "start:server": "node dist/server.js",
     "start:worker": "node dist/queue/worker.js",
     "start:all": "concurrently \"npm run start\" \"npm run start:worker\"",

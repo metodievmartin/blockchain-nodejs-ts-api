@@ -1,24 +1,16 @@
 import { Router } from 'express';
 
 import * as userController from './user.controller';
-import { requireAuthentication } from '../../../middlewares/auth.middleware';
 import { validateBody } from '../../../middlewares/validate.middleware';
 import { updateUserProfileSchema, changePasswordSchema } from './user.dto';
+import { requireAuthentication } from '../../../middlewares/auth.middleware';
 
 const router = Router();
 
-/**
- * GET /users/me
- * Returns the authenticated user's profile
- * Protected by authentication middleware
- */
+// GET /me - Get user profile (requires auth)
 router.get('/me', requireAuthentication, userController.getAuthenticatedUser);
 
-/**
- * PUT /users/me
- * Updates the authenticated user's profile (email and/or username)
- * Protected by authentication middleware
- */
+// PUT /me - Update user profile (requires auth)
 router.put(
   '/me',
   requireAuthentication,
@@ -26,11 +18,7 @@ router.put(
   userController.updateAuthenticatedUserProfile
 );
 
-/**
- * PUT /users/me/password
- * Changes the authenticated user's password
- * Protected by authentication middleware
- */
+// PUT /me/password - Change password (requires auth)
 router.put(
   '/me/password',
   requireAuthentication,

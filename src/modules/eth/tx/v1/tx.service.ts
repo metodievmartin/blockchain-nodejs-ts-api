@@ -98,7 +98,13 @@ export async function getTransactions(
 
   // Determine actual block range and get address info
   const addressInfo = await resolveStartingBlock(normalizedAddress);
-  const actualFrom = getStartingBlockFromInfo(addressInfo);
+  const contractCreationBlock = getStartingBlockFromInfo(addressInfo);
+  
+  // Use explicit fromBlock if provided and valid, otherwise use contract creation block
+  const actualFrom = originalFromBlock === 0 
+    ? contractCreationBlock  // Default case: use contract creation block
+    : Math.max(originalFromBlock, contractCreationBlock);  // Explicit case: respect user input but not before creation
+  
   const latestBlock = await provider.getBlockNumber();
   // Ensure toBlock doesn't exceed the latest block to prevent future block requests
   const actualTo = originalToBlock

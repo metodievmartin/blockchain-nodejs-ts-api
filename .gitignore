@@ -24,7 +24,6 @@ Thumbs.db
 
 # Ignore Redis prod secrets
 users.acl
-redis.conf
 
 # Editor configs
 .vscode/

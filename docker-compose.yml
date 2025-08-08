@@ -1,0 +1,92 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:17.5-alpine
+    container_name: blockchain-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:8.2-rc1-alpine
+    container_name: blockchain-redis
+    environment:
+      REDIS_USER: ${REDIS_USER}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./redis/redis.conf.docker:/usr/local/etc/redis/redis.conf:ro
+      - ./redis/users.acl.template:/usr/local/etc/redis/users.acl.template:ro
+      - ./docker/init-redis.sh:/usr/local/bin/init-redis.sh:ro
+    command: [ "sh", "/usr/local/bin/init-redis.sh" ]
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-u", "redis://${REDIS_USER}:${REDIS_PASSWORD}@localhost:6379", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Main API Server
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blockchain-api
+    env_file:
+      - .env
+    environment:
+      # Override database URLs for container networking
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      REDIS_URL: redis://${REDIS_USER}:${REDIS_PASSWORD}@redis:6379
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+      - ./docker/start-api.sh:/usr/local/bin/start-api.sh:ro
+    restart: unless-stopped
+    command: ["sh", "/usr/local/bin/start-api.sh"]
+
+  # Queue Worker
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blockchain-worker
+    env_file:
+      - .env
+    environment:
+      # Override database URLs for container networking
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      REDIS_URL: redis://${REDIS_USER}:${REDIS_PASSWORD}@redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    command: [ "npm", "run", "start:worker" ]
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
